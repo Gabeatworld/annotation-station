@@ -15,7 +15,9 @@ notes, search and filters.
 
 ## Done: Which screen is selected
 The display carrying the overlay wears a Siri-style breathing glow around its edge, so a
-multi-monitor desk shows at a glance which screen is frozen. Both the colour sweep and the
+multi-monitor desk shows at a glance which screen is frozen. Tuned to stay out of the way:
+a narrow band, a shallow pulse, and a lap of the colour wheel that takes the best part of a
+minute, on a palette anchored to the #C3C3EF mark accent. Both the colour sweep and the
 edge falloff are baked once per screen size; only an opacity pulse and a layer rotation run
 per frame, and both stop when the overlay is ordered out or the user asks for reduced motion.
 
