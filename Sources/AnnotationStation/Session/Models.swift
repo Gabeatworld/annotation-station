@@ -10,12 +10,39 @@ enum CaptureMode: String, Codable, CaseIterable {
     /// `feedback.md`: a human-readable report with the page and browser the marks were made on.
     case website
 
+    /// Long form, for prose like the hub's session line.
     var title: String {
         switch self {
         case .llm: return "Claude Code"
         case .website: return "Website feedback"
         }
     }
+
+    /// Compact label for the icon+label pickers, where the row is already tight.
+    var shortTitle: String {
+        switch self {
+        case .llm: return "Claude"
+        case .website: return "Web"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .llm: return "sparkles"
+        case .website: return "globe"
+        }
+    }
+
+    var pickerToolTip: String {
+        switch self {
+        case .llm: return "Send the prompt to Claude Code"
+        case .website: return "Write a shareable feedback report with the page and browser you annotated"
+        }
+    }
+
+    /// Left-to-right order in the pickers. Separate from `allCases` so the on-disk encoding and
+    /// the display order can change independently.
+    static let pickerOrder: [CaptureMode] = [.website, .llm]
 }
 
 /// What the frontmost browser was showing when a screen was captured. Collected off the main

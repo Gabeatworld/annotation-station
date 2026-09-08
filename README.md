@@ -105,9 +105,10 @@ multi-monitor desk it's obvious which screen is frozen.
 
 ## The two send modes
 
-A switch in the overlay toolbar, next to Send, decides where a session goes. It's there rather
+A `Web / Claude` picker in the overlay toolbar, next to Send, decides where a session goes —
+built like the Box/Arrow tool picker so the two read as one set of controls. It's there rather
 than in the compose panel because `⌘⏎` sends without opening compose. The compose panel mirrors
-the same setting.
+the same setting with the same picker.
 
 **Claude Code** (the default) writes `prompt.md` — the annotated PNGs referenced by absolute
 path, each mark as a numbered line with its note, and per-mark crops where a crop adds

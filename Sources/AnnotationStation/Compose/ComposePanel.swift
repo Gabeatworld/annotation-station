@@ -97,11 +97,20 @@ final class ComposePanel: NSPanel, NSWindowDelegate {
         modeLabel.frame = CGRect(x: margin, y: y + 4, width: 60, height: 17)
         container.addSubview(modeLabel)
 
-        let modes = CaptureMode.allCases
-        let picker = NSSegmentedControl(labels: modes.map(\.title), trackingMode: .selectOne, target: nil, action: nil)
+        // Same icon+label picker as the overlay toolbar, in the same order — this panel only
+        // mirrors a choice that can equally be made out there.
+        let modes = CaptureMode.pickerOrder
+        let picker = NSSegmentedControl()
+        picker.segmentCount = modes.count
+        for (index, mode) in modes.enumerated() {
+            picker.setImage(NSImage(systemSymbolName: mode.symbolName, accessibilityDescription: mode.title), forSegment: index)
+            picker.setLabel(mode.shortTitle, forSegment: index)
+            picker.setToolTip(mode.pickerToolTip, forSegment: index)
+        }
         picker.segmentStyle = .rounded
+        picker.trackingMode = .selectOne
         picker.selectedSegment = modes.firstIndex(of: session.mode) ?? 0
-        picker.frame = CGRect(x: margin + 66, y: y, width: 280, height: 24)
+        picker.frame = CGRect(x: margin + 66, y: y, width: 200, height: 24)
         container.addSubview(picker)
         modeControl = picker
         y += 28
@@ -166,7 +175,7 @@ final class ComposePanel: NSPanel, NSWindowDelegate {
         var notes: [UUID: String] = [:]
         for (id, field) in noteFields { notes[id] = field.stringValue }
         let instruction = textView.string
-        let modes = CaptureMode.allCases
+        let modes = CaptureMode.pickerOrder
         let mode = modes.indices.contains(modeControl.selectedSegment) ? modes[modeControl.selectedSegment] : .llm
         orderOut(nil)
         onSend?(mode, instruction, notes)
