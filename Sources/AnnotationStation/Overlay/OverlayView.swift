@@ -180,57 +180,18 @@ final class OverlayView: NSView {
     }
 
     /// Each mark's note sits next to its badge ("Add note…" when empty). Click to edit.
+    /// Layout and drawing live in Renderer so the overlay and the exported PNG agree.
     private func drawNoteLabels(in ctx: CGContext) {
-        noteLabelRects = [:]
-        badgeRects = [:]
-        let radius = MarkGeometry.badgeDiameter / 2
-        for mark in marks {
-            let center = MarkGeometry.badgeCenter(for: mark.kind, in: bounds)
-            badgeRects[mark.id] = CGRect(x: center.x - radius, y: center.y - radius, width: 2 * radius, height: 2 * radius)
+        let items = marks.map { mark -> Renderer.ChipItem in
+            let text = mark.note.trimmingCharacters(in: .whitespacesAndNewlines)
+            return Renderer.ChipItem(id: mark.id, kind: mark.kind,
+                                     text: text.isEmpty ? "Add note…" : mark.note,
+                                     isPlaceholder: text.isEmpty)
         }
-        for mark in marks {
-            let center = MarkGeometry.badgeCenter(for: mark.kind, in: bounds)
-            if note?.markID == mark.id { continue }
-
-            let isEmpty = mark.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            let text = isEmpty ? "Add note…" : mark.note.replacingOccurrences(of: "\n", with: " ")
-            let paragraph = NSMutableParagraphStyle()
-            paragraph.lineBreakMode = .byTruncatingTail
-            let attrs: [NSAttributedString.Key: Any] = [
-                .font: NSFont.systemFont(ofSize: 12, weight: isEmpty ? .regular : .medium),
-                .foregroundColor: isEmpty ? NSColor.white.withAlphaComponent(0.7) : NSColor.white,
-                .paragraphStyle: paragraph,
-            ]
-            let measured = (text as NSString).size(withAttributes: attrs)
-            let width = min(measured.width, 300) + 18
-            let height = measured.height + 8
-            var rect = CGRect(x: center.x + radius + 6, y: center.y - height / 2, width: width, height: height)
-            rect.origin.x = min(rect.origin.x, bounds.maxX - width - 4)
-            rect.origin.y = min(max(rect.origin.y, 4), bounds.maxY - height - 4)
-            // Slide down past anything already on screen (other badges, earlier pills).
-            let obstacles = badgeRects.filter { $0.key != mark.id }.map(\.value).map { $0.insetBy(dx: -4, dy: -4) }
-                + noteLabelRects.values.map { $0.insetBy(dx: -4, dy: -4) }
-            var attempts = 0
-            while attempts < 6, obstacles.contains(where: { $0.intersects(rect) }) {
-                rect.origin.y += height + 6
-                attempts += 1
-            }
-            rect.origin.y = min(rect.origin.y, bounds.maxY - height - 4)
-
-            ctx.saveGState()
-            ctx.setFillColor(NSColor(white: 0.1, alpha: 0.82).cgColor)
-            ctx.addPath(CGPath(roundedRect: rect, cornerWidth: height / 2, cornerHeight: height / 2, transform: nil))
-            ctx.fillPath()
-            if isEmpty {
-                ctx.setStrokeColor(NSColor.white.withAlphaComponent(0.35).cgColor)
-                ctx.setLineWidth(1)
-                ctx.addPath(CGPath(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), cornerWidth: height / 2, cornerHeight: height / 2, transform: nil))
-                ctx.strokePath()
-            }
-            ctx.restoreGState()
-            (text as NSString).draw(in: rect.insetBy(dx: 9, dy: 4), withAttributes: attrs)
-            noteLabelRects[mark.id] = rect
-        }
+        // The mark being edited has the popover over it; a chip underneath would just show through.
+        let layout = Renderer.drawNoteChips(items, bounds: bounds, skipping: note?.markID, in: ctx)
+        noteLabelRects = layout.chips
+        badgeRects = layout.badges
     }
 
     // MARK: - Hit-testing helpers

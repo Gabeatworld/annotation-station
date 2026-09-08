@@ -117,9 +117,9 @@ you used most recently, wherever that window is. If neither is running it's copi
 goes back to what you were annotating.
 
 **Website feedback** frames each annotated capture like a macOS window screenshot — rounded
-card, shadow, gradient backdrop, the page title and URL in the title bar, then the notes
-themselves listed under it against their numbers, and a caption line with browser, viewport,
-display, time and who filed it. That context is burned into the image
+card, shadow, gradient backdrop, the page title and URL in the title bar, each note burned in
+beside its own mark exactly where you placed it, the same notes listed under the capture against
+their numbers, and a caption line with browser, viewport, display, time and who filed it. That context is burned into the image
 on purpose: pasting a screenshot into Slack, Linear or Notion attaches the file and drops the
 text that came with it, so anything that only lives in the text does not survive the paste.
 
@@ -245,6 +245,7 @@ defaults write com.gabe.annotation-station debugHooks -bool true
 Scripts/debug.sh capture              # same as ⌘⇧A
 Scripts/debug.sh demo                 # drop three demo marks on the open overlay
 Scripts/debug.sh compose              # open the compose panel
+Scripts/debug.sh mode website|llm     # flip the send-mode picker
 Scripts/debug.sh snapshot out.png     # the app screenshots its own display, overlay included
 Scripts/debug.sh hub | view           # sessions window / full-size viewer
 Scripts/debug.sh next | send | discard

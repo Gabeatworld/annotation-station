@@ -206,7 +206,8 @@ final class SessionStore {
                     guard let image = imgs[screen.index] else { throw StoreError.missingImage(screen.index) }
                     let marks = screen.orderedMarks
                     let numbers = (0..<marks.count).map { number + 1 + $0 }
-                    var annotated = try Renderer.annotatedImage(image: image, screen: screen, numbers: numbers)
+                    var annotated = try Renderer.annotatedImage(image: image, screen: screen, numbers: numbers,
+                                                                includeNotes: s.mode == .website)
                     // Website feedback gets the window treatment; the agent path keeps the bare
                     // capture, where a frame and a caption would only cost tokens.
                     if s.mode == .website {

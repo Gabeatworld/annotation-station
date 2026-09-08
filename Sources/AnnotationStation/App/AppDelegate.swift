@@ -112,6 +112,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayViewDelegate {
                 state = .idle
                 refreshStatus()
             }
+        case "mode":
+            // Same path the toolbar picker takes, so a scripted run exercises the real thing.
+            let mode = CaptureMode(rawValue: note.userInfo?["path"] as? String ?? "") ?? .llm
+            store.setMode(mode)
+            overlayWindow?.overlayView.setMode(mode)
         case "hub":
             hub.present()
         case "view":
