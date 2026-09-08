@@ -26,12 +26,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayViewDelegate {
     private lazy var hub: HubWindowController = {
         let hub = HubWindowController(store: store)
         hub.onCopyPrompt = { [weak self] url in self?.recopyPrompt(from: url) }
+        hub.onCopyFeedback = { [weak self] url in self?.recopyFeedback(from: url) }
         return hub
     }()
     private var composePanel: ComposePanel?
     /// The app to hand focus (and the paste) back to. Captured before we activate ourselves.
     private var previousApp: NSRunningApplication?
     private var composeReturnsToOverlay = false
+    /// Browser probes still in flight, and what to run once they all land (see `send`).
+    private var pendingProbes = 0
+    private var probeWaiters: [() -> Void] = []
 
     // MARK: - Launch
 
@@ -110,6 +114,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayViewDelegate {
             hub.present()
         case "next":
             nextScreen()
+        case "compose":
+            if case .annotating = state, let window = overlayWindow {
+                overlayDidRequestCompose(window.overlayView)
+            }
         case "send":
             if case .annotating = state {
                 destroyOverlay()
@@ -218,6 +226,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayViewDelegate {
             state = .annotating(screenIndex: screen.index)
             refreshStatus()
             Log.info("overlay visible \(SessionStore.ms(since: t0)) ms after hotkey (screen \(screen.index))")
+            probeBrowser(for: screen.index)
         } catch {
             Log.error("starting screen: \(error.localizedDescription)")
             state = .idle
@@ -236,6 +245,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayViewDelegate {
         )
         overlayWindow = window
         window.present()
+    }
+
+    /// Ask the app we just captured what page it was showing. Fire-and-forget so the overlay is
+    /// never held up: the answer lands on the screen record whenever it arrives.
+    private func probeBrowser(for screenIndex: Int) {
+        guard let app = previousApp, BrowserProbe.isBrowser(app) else { return }
+        pendingProbes += 1
+        BrowserProbe.context(for: app) { [weak self] context in
+            guard let self else { return }
+            if let context { store.setContext(screenIndex: screenIndex, context: context) }
+            pendingProbes -= 1
+            guard pendingProbes == 0 else { return }
+            let waiters = probeWaiters
+            probeWaiters = []
+            waiters.forEach { $0() }
+        }
+    }
+
+    /// Runs `body` once every outstanding probe has answered, or after `timeout`, whichever is
+    /// first. Only website sends wait: the very first probe of a browser costs a one-time
+    /// Automation prompt, and a report that silently lost its URL is worse than a short pause.
+    private func whenBrowserProbesSettle(timeout: TimeInterval, _ body: @escaping () -> Void) {
+        guard pendingProbes > 0 else { body(); return }
+        Log.info("waiting up to \(Int(timeout * 1000)) ms for \(pendingProbes) browser probe(s)")
+        var fired = false
+        let once = {
+            guard !fired else { return }
+            fired = true
+            body()
+        }
+        probeWaiters.append(once)
+        DispatchQueue.main.asyncAfter(deadline: .now() + timeout, execute: once)
     }
 
     private func hideOverlay() {
@@ -376,8 +417,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayViewDelegate {
         composeReturnsToOverlay = returnToOverlay
 
         let panel = ComposePanel(session: session, on: screen)
-        panel.onSend = { [weak self] instruction, notes in
+        panel.onSend = { [weak self] mode, instruction, notes in
             guard let self else { return }
+            store.setMode(mode)
             store.setInstruction(instruction)
             for (id, note) in notes { store.setNote(markID: id, note: note) }
             composePanel = nil
@@ -402,18 +444,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayViewDelegate {
     // MARK: - Send
 
     private func send() {
-        guard store.isOpen else { return }
+        guard let mode = store.session?.mode else { return }
         state = .sending
+        if mode == .website {
+            whenBrowserProbesSettle(timeout: 1.5) { [weak self] in self?.finalizeAndDeliver() }
+        } else {
+            finalizeAndDeliver()
+        }
+    }
+
+    private func finalizeAndDeliver() {
         let t0 = Date()
         store.finalize { [weak self] result in
             guard let self else { return }
             switch result {
-            case .success(let prompt):
-                Clipboard.copy(prompt)
-                Log.info("prompt on clipboard (\(prompt.count) chars) \(SessionStore.ms(since: t0)) ms after send")
+            case .success(let delivery):
+                Clipboard.copy(delivery.text)
+                Log.info("\(delivery.mode.rawValue) document on clipboard (\(delivery.text.count) chars) \(SessionStore.ms(since: t0)) ms after send")
                 state = .idle
                 refreshStatus()
-                deliver()
+                switch delivery.mode {
+                case .llm: deliverToAgent()
+                case .website: deliverFeedback(delivery)
+                }
             case .failure(let error):
                 Log.error("send failed: \(error.localizedDescription)")
                 state = .idle
@@ -425,10 +478,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayViewDelegate {
         }
     }
 
+    /// Website feedback goes to a person, not an agent: leave it on the clipboard, hand focus
+    /// straight back to the browser being reviewed, and say where the rendered file is.
+    private func deliverFeedback(_ delivery: SessionStore.Delivery) {
+        let annotated = previousApp
+        previousApp = nil
+        annotated?.activate(from: .current, options: [])
+        NSSound(named: "Glass")?.play()
+        Toast.show("Website feedback copied · \(FeedbackComposer.fileName) in \(delivery.directory.lastPathComponent)",
+                   symbol: "text.badge.checkmark", duration: 3)
+    }
+
     /// Paste into the most recently used running agent app (Claude Desktop or Ghostty),
     /// bringing it to the front wherever it is. No agent running → copy only and hand focus
     /// back to the annotated app. Either way, make a sound.
-    private func deliver() {
+    private func deliverToAgent() {
         let annotated = previousApp
         previousApp = nil
         if let target = pasteTargets.currentTarget() {
@@ -466,6 +530,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayViewDelegate {
         alert.addButton(withTitle: "OK")
         NSApp.activate(ignoringOtherApps: true)
         alert.runModal()
+    }
+
+    private func recopyFeedback(from directory: URL) {
+        guard let feedback = SessionStore.feedback(in: directory) else {
+            Log.error("no \(FeedbackComposer.fileName) in \(directory.lastPathComponent)")
+            return
+        }
+        Clipboard.copy(feedback)
+        NSSound(named: "Tink")?.play()
+        Toast.show("Feedback copied from \(directory.lastPathComponent)", symbol: "doc.on.clipboard")
+        Log.info("re-copied feedback from \(directory.lastPathComponent)")
     }
 
     private func recopyPrompt(from directory: URL) {

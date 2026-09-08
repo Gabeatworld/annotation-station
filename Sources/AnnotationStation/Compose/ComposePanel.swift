@@ -3,10 +3,11 @@ import AppKit
 /// Floating panel for the overall instruction plus every mark's note, grouped by screen.
 /// ⌘⏎ sends, ⎋ goes back. Optional: `⌘⏎` from the overlay skips it entirely (PLAN.md §2).
 final class ComposePanel: NSPanel, NSWindowDelegate {
-    var onSend: ((_ instruction: String, _ notes: [UUID: String]) -> Void)?
+    var onSend: ((_ mode: CaptureMode, _ instruction: String, _ notes: [UUID: String]) -> Void)?
     var onCancel: (() -> Void)?
 
     private let textView: NSTextView
+    private let modeControl: NSSegmentedControl
     private var noteFields: [(UUID, NSTextField)] = []
     private var finished = false
 
@@ -89,6 +90,31 @@ final class ComposePanel: NSPanel, NSWindowDelegate {
         }
         noteFields = fields
 
+        // Mode row: which document Send produces (ROADMAP "feedback types").
+        let modeLabel = NSTextField(labelWithString: "Send as")
+        modeLabel.font = NSFont.systemFont(ofSize: 12, weight: .semibold)
+        modeLabel.textColor = .secondaryLabelColor
+        modeLabel.frame = CGRect(x: margin, y: y + 4, width: 60, height: 17)
+        container.addSubview(modeLabel)
+
+        let modes = CaptureMode.allCases
+        let picker = NSSegmentedControl(labels: modes.map(\.title), trackingMode: .selectOne, target: nil, action: nil)
+        picker.segmentStyle = .rounded
+        picker.selectedSegment = modes.firstIndex(of: session.mode) ?? 0
+        picker.frame = CGRect(x: margin + 66, y: y, width: 280, height: 24)
+        container.addSubview(picker)
+        modeControl = picker
+        y += 28
+
+        if let context = session.primaryContext {
+            var parts = [context.shortURL, context.browserName]
+            if let v = context.viewport { parts.append("\(Int(v.width)) × \(Int(v.height)) CSS px") }
+            label(parts.joined(separator: "  ·  "), size: 11, weight: .regular, color: .tertiaryLabelColor)
+        } else {
+            picker.toolTip = "No page details were captured — a browser wasn't frontmost, or Automation is off for it. Website feedback still carries the screenshots and notes."
+            y += 4
+        }
+
         let hint = NSTextField(labelWithString: "⌘⏎ send  ·  ⎋ back")
         hint.font = NSFont.systemFont(ofSize: 11)
         hint.textColor = .tertiaryLabelColor
@@ -140,8 +166,10 @@ final class ComposePanel: NSPanel, NSWindowDelegate {
         var notes: [UUID: String] = [:]
         for (id, field) in noteFields { notes[id] = field.stringValue }
         let instruction = textView.string
+        let modes = CaptureMode.allCases
+        let mode = modes.indices.contains(modeControl.selectedSegment) ? modes[modeControl.selectedSegment] : .llm
         orderOut(nil)
-        onSend?(instruction, notes)
+        onSend?(mode, instruction, notes)
     }
 
     @objc private func cancelTapped(_ sender: Any?) {

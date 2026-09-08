@@ -5,6 +5,7 @@ import AppKit
 /// the fact: copy the prompt again, reveal the folder, delete.
 final class HubWindowController: NSWindowController {
     var onCopyPrompt: ((URL) -> Void)?
+    var onCopyFeedback: ((URL) -> Void)?
     private let store: SessionStore
     private let stack = NSStackView()
     private let footer = NSTextField(labelWithString: "")
@@ -195,7 +196,9 @@ final class HubWindowController: NSWindowController {
         title.stringValue = "\(time)   ·   \(counts)"
         title.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
 
-        let status = NSTextField(labelWithString: summary.isOpen ? "In progress" : (summary.isFinished ? "Sent" : "Not sent"))
+        var statusText = summary.isOpen ? "In progress" : (summary.isFinished ? "Sent" : "Not sent")
+        if session.mode != .llm { statusText += "  ·  \(session.mode.title)" }
+        let status = NSTextField(labelWithString: statusText)
         status.font = NSFont.systemFont(ofSize: 11, weight: .medium)
         status.textColor = summary.isOpen ? .systemOrange : (summary.isFinished ? .systemGreen : .secondaryLabelColor)
 
@@ -212,6 +215,14 @@ final class HubWindowController: NSWindowController {
         column.orientation = .vertical
         column.alignment = .leading
         column.spacing = 4
+        if let context = session.primaryContext {
+            let page = NSTextField(labelWithString: "\(context.shortURL)  ·  \(context.browserName)")
+            page.font = NSFont.systemFont(ofSize: 11)
+            page.textColor = .secondaryLabelColor
+            page.lineBreakMode = .byTruncatingMiddle
+            page.toolTip = context.url
+            column.insertArrangedSubview(page, at: 2)
+        }
         let instruction = session.instruction.trimmingCharacters(in: .whitespacesAndNewlines)
         if !instruction.isEmpty {
             let label = NSTextField(wrappingLabelWithString: "Instruction: \(instruction)")
@@ -227,7 +238,13 @@ final class HubWindowController: NSWindowController {
         let delete = actionButton("Delete", symbol: "trash", action: #selector(deleteSession(_:)), dir: summary.directory)
         delete.hasDestructiveAction = true
         delete.isEnabled = !summary.isOpen
-        let actions = NSStackView(views: [copy, reveal, delete])
+        var buttons: [NSView] = [copy]
+        if summary.hasFeedback {
+            buttons.append(actionButton("Copy Feedback", symbol: "text.badge.checkmark",
+                                        action: #selector(copyFeedback(_:)), dir: summary.directory))
+        }
+        buttons.append(contentsOf: [reveal, delete])
+        let actions = NSStackView(views: buttons)
         actions.orientation = .horizontal
         actions.spacing = 6
 
@@ -293,6 +310,11 @@ final class HubWindowController: NSWindowController {
     @objc private func copyPrompt(_ sender: Any?) {
         guard let dir = directory(for: sender) else { return }
         onCopyPrompt?(dir)
+    }
+
+    @objc private func copyFeedback(_ sender: Any?) {
+        guard let dir = directory(for: sender) else { return }
+        onCopyFeedback?(dir)
     }
 
     @objc private func reveal(_ sender: Any?) {
