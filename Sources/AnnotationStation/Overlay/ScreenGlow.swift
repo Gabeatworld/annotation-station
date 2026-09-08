@@ -20,18 +20,27 @@ final class ScreenGlowView: NSView {
     /// Side of the pre-rendered colour wheel.
     private static let sweepSide = 1024
 
-    /// Anchored on the mark accent, but spread right around the hue circle so several colours are
-    /// on the edge at once — that simultaneity is what makes Siri's glow read as a gradient
-    /// rather than as a tinted border. Keeping every stop pale and unsaturated is what keeps it
-    /// quiet; clustering them near one hue only made it look flat.
+    /// Red, orange, pink, violet and blue, every stop kept pale.
+    ///
+    /// The wheel travels out along the warm-to-blue arc and back rather than making a full lap.
+    /// A full lap has to cross the yellow-green arc somewhere, and a dark, unsaturated yellow is
+    /// olive — which is exactly how it looked. Doubling back keeps every hue one worth showing,
+    /// at the cost of opposite edges mirroring each other, which reads as symmetry rather than
+    /// as repetition.
+    ///
+    /// First and last stop must stay identical or the sweep shows a seam where it wraps.
     private static let palette: [NSColor] = [
-        NSColor(srgbRed: 0.765, green: 0.765, blue: 0.937, alpha: 1),  // #C3C3EF, the mark accent
-        NSColor(srgbRed: 0.608, green: 0.722, blue: 0.961, alpha: 1),  // periwinkle
-        NSColor(srgbRed: 0.525, green: 0.847, blue: 0.910, alpha: 1),  // aqua
-        NSColor(srgbRed: 0.639, green: 0.882, blue: 0.784, alpha: 1),  // mint
+        NSColor(srgbRed: 0.961, green: 0.780, blue: 0.639, alpha: 1),  // orange
+        NSColor(srgbRed: 0.949, green: 0.667, blue: 0.647, alpha: 1),  // red
         NSColor(srgbRed: 0.937, green: 0.729, blue: 0.855, alpha: 1),  // pink
         NSColor(srgbRed: 0.780, green: 0.663, blue: 0.914, alpha: 1),  // violet
-        NSColor(srgbRed: 0.765, green: 0.765, blue: 0.937, alpha: 1),  // back to the accent, seamless
+        NSColor(srgbRed: 0.765, green: 0.765, blue: 0.937, alpha: 1),  // #C3C3EF, the mark accent
+        NSColor(srgbRed: 0.608, green: 0.722, blue: 0.961, alpha: 1),  // periwinkle, the far end
+        NSColor(srgbRed: 0.765, green: 0.765, blue: 0.937, alpha: 1),  // #C3C3EF
+        NSColor(srgbRed: 0.780, green: 0.663, blue: 0.914, alpha: 1),  // violet
+        NSColor(srgbRed: 0.937, green: 0.729, blue: 0.855, alpha: 1),  // pink
+        NSColor(srgbRed: 0.949, green: 0.667, blue: 0.647, alpha: 1),  // red
+        NSColor(srgbRed: 0.961, green: 0.780, blue: 0.639, alpha: 1),  // back to orange, seamless
     ]
 
     private let sweep = CALayer()
@@ -147,12 +156,35 @@ final class ScreenGlowView: NSView {
         return ctx.makeImage()
     }
 
-    /// Linear interpolation through `palette`, with `t` in 0...1 around the wheel.
+    /// Interpolation through `palette`, with `t` in 0...1 around the wheel.
     private static func color(at t: CGFloat) -> NSColor {
         let span = 1 / CGFloat(palette.count - 1)
         let slot = min(palette.count - 2, Int(t / span))
         let local = (t - CGFloat(slot) * span) / span
-        return palette[slot].blended(withFraction: local, of: palette[slot + 1]) ?? palette[slot]
+        return blend(palette[slot], palette[slot + 1], local)
+    }
+
+    /// Blend around the hue circle, not through RGB.
+    ///
+    /// Component-wise RGB blending between two stops far apart on the wheel passes through grey:
+    /// mint to gold came out olive, and every other pair lost some life in the middle. Rotating
+    /// the hue instead keeps each intermediate as clean as the stops on either side of it.
+    private static func blend(_ a: NSColor, _ b: NSColor, _ t: CGFloat) -> NSColor {
+        var ha: CGFloat = 0, sa: CGFloat = 0, ba: CGFloat = 0, aa: CGFloat = 0
+        var hb: CGFloat = 0, sb: CGFloat = 0, bb: CGFloat = 0, ab: CGFloat = 0
+        guard let ca = a.usingColorSpace(.sRGB), let cb = b.usingColorSpace(.sRGB) else { return a }
+        ca.getHue(&ha, saturation: &sa, brightness: &ba, alpha: &aa)
+        cb.getHue(&hb, saturation: &sb, brightness: &bb, alpha: &ab)
+        // Take the short way round, so a pair either side of 0° does not run backwards
+        // through every other hue.
+        var delta = hb - ha
+        if delta > 0.5 { delta -= 1 } else if delta < -0.5 { delta += 1 }
+        var hue = (ha + delta * t).truncatingRemainder(dividingBy: 1)
+        if hue < 0 { hue += 1 }
+        return NSColor(hue: hue,
+                       saturation: sa + (sb - sa) * t,
+                       brightness: ba + (bb - ba) * t,
+                       alpha: aa + (ab - aa) * t)
     }
 
     /// A rounded-rect band that fades to nothing as it moves inward. Concentric strokes with a
