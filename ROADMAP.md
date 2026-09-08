@@ -43,8 +43,14 @@ Copy Prompt always works.
     `defaults write com.gabe.annotation-station websiteContext -bool false`.
   - Viewport is only available when "Allow JavaScript from Apple Events" is on in the
     browser's developer menu, so it is omitted more often than not.
-- **Next: pretty screenshot**: burn marks in, then frame the capture like macOS's ⌘⇧3 device
-  mockup (rounded window, shadow, gradient backdrop) for sharing in Slack/docs.
+- **Framed screenshot** (done, website mode only): marks are burned in, then the capture is
+  framed like a macOS window screenshot — rounded card, drop shadow, gradient backdrop, three
+  window dots, the page title and URL centred in the title bar, and a caption line underneath
+  carrying browser, viewport, display, time and reporter.
+  The caption is the point, not decoration: a pasted screenshot nearly always arrives alone,
+  because Slack, Linear and Notion take the image file off the pasteboard and drop the text
+  that came with it. Burning the context into the picture is what makes a paste self-contained.
+  The agent path keeps the bare capture — a frame and a caption there would only cost tokens.
 
 ## Sharing and teams (later)
 - **Distribution** (plumbing done): the app embeds Sparkle and updates itself from an appcast

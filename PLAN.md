@@ -219,7 +219,7 @@ The status item reflects the state; `⌘⇧⏎` is only enabled when a session i
 ### M1 — Single screen, end to end (1 day)
 - Capture display under cursor → overlay with freeze-frame → left-drag boxes, right-drag arrows → note popover → `⏎` → compose panel → **Copy**.
 - Renderer writes `screen-1.png`, `screen-1-annotated.png`, `region-n.png`, `prompt.md`, `session.json`.
-- Mark styling: 3pt stroke in a high-contrast color (`#FF3B30`) with a 1pt white outer halo so it reads on any background; 22pt circular badge with white number (box: top-left corner, outside the box; arrow: at the tail). Arrow head is a filled triangle ~14pt long. Dim the area outside boxes by 20% so boxes pop; arrows don't dim.
+- Mark styling: 3pt stroke in `#C3C3EF` with a 1pt dark outer halo so it reads on any background — the accent is pale, and a light stroke haloed in white disappears against a light page, which is most of what gets annotated. 22pt circular badge with a dark numeral, centred on its cap height rather than its line box (a line box reserves descender room digits never use, which lifts the numeral off centre). Box badge: top-left corner, outside the box; arrow: at the tail. Arrow head is a filled triangle ~14pt long. Dim the area outside boxes by 20% so boxes pop; arrows don't dim.
 - Select, move, resize/reroute marks. `⎋` discards. `⌘Z` undo. `⌫` deletes + renumbers.
 - **Done when:** paste into Claude Code and it reads the image, answers about `[1]`, `[2]`, and correctly describes where arrow `[3]` points. This is Casso parity plus arrows.
 

@@ -1,5 +1,26 @@
 import AppKit
 
+/// The mark's number badge, drawn by the same code that burns it into the PNG so the editor
+/// and the screenshot can never disagree about how a badge looks.
+final class BadgeView: NSView {
+    private let number: Int
+
+    init(number: Int) {
+        self.number = number
+        super.init(frame: CGRect(origin: .zero, size: Renderer.badgeSize(for: number)))
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    override var isFlipped: Bool { true }
+    override var intrinsicContentSize: NSSize { Renderer.badgeSize(for: number) }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let ctx = NSGraphicsContext.current?.cgContext else { return }
+        Renderer.drawBadge(number, at: CGPoint(x: bounds.midX, y: bounds.midY), in: ctx)
+    }
+}
+
 /// Note editor anchored next to a mark. ⏎, ⇥ or Done commits; ⎋ cancels.
 /// Lives as a subview of the overlay so focus handling stays inside one window.
 final class NotePopover: HUDPanelView, NSTextFieldDelegate {
@@ -18,15 +39,13 @@ final class NotePopover: HUDPanelView, NSTextFieldDelegate {
         layer?.cornerRadius = 10
         layer?.borderColor = MarkStyle.color.withAlphaComponent(0.8).cgColor
 
-        // Number badge, matching the mark's own badge.
-        let badge = NSTextField(labelWithString: "\(number)")
-        badge.font = NSFont.systemFont(ofSize: 13, weight: .bold)
-        badge.textColor = .white
-        badge.alignment = .center
-        badge.wantsLayer = true
-        badge.layer?.backgroundColor = MarkStyle.color.cgColor
-        badge.layer?.cornerRadius = 11
-        badge.frame = CGRect(x: 12, y: 12, width: max(22, badge.fittingSize.width + 10), height: 22)
+        // Number badge, drawn by the renderer so it matches the one burned into the PNG.
+        // An NSTextField label was wrong here: a label draws its text from the top of its
+        // frame, so the numeral sat high in the circle rather than centred in it.
+        let badge = BadgeView(number: number)
+        let badgeSize = Renderer.badgeSize(for: number)
+        badge.frame = CGRect(x: 12, y: (Self.size.height - badgeSize.height) / 2,
+                             width: badgeSize.width, height: badgeSize.height)
         addSubview(badge)
 
         let x = badge.frame.maxX + 10

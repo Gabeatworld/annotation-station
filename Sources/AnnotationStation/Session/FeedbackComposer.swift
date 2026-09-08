@@ -37,6 +37,37 @@ enum FeedbackComposer {
         return f
     }()
 
+    static func displayTimestamp(_ date: Date) -> String { dateFormatter.string(from: date) }
+
+    /// The environment facts for one screen, in display order. Shared by the report and by the
+    /// caption burned into the image so the two can never disagree. Everything except the
+    /// display line is best effort, so each part is emitted only if known.
+    static func facts(for screen: Screen) -> [String] {
+        var facts: [String] = []
+        if let c = screen.context {
+            facts.append(c.browserVersion.isEmpty ? c.browserName : "\(c.browserName) \(c.browserVersion)")
+            if let v = c.viewport { facts.append("viewport \(Int(v.width)) × \(Int(v.height)) CSS px") }
+        }
+        facts.append("display \(Int(screen.pointSize.width)) × \(Int(screen.pointSize.height)) pt @\(scaleLabel(screen.scale))")
+        return facts
+    }
+
+    /// What gets burned under the annotated PNG in website mode.
+    ///
+    /// A pasted screenshot usually arrives on its own: Slack, Linear and Notion take the image
+    /// file off the pasteboard and drop the text that came with it. So the page, the browser and
+    /// the display have to survive inside the picture, or the reviewer gets marks with no idea
+    /// what they were made on.
+    static func caption(for screen: Screen, reporter: Reporter, timestamp: String) -> (title: String?, detail: String) {
+        var title: String?
+        if let c = screen.context {
+            let pageTitle = c.pageTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            title = pageTitle.isEmpty ? c.url : "\(pageTitle) — \(c.url)"
+        }
+        let detail = (facts(for: screen) + [timestamp, reporter.display]).joined(separator: "   ·   ")
+        return (title, detail)
+    }
+
     static func render(session: Session, directory: URL, reporter: Reporter, timestamp: String? = nil) -> String {
         var lines: [String] = []
         let context = session.primaryContext
@@ -86,19 +117,8 @@ enum FeedbackComposer {
     }
 
     /// The environment block for one screen: what a developer needs to reproduce it.
-    /// Everything except the display line is best effort, so each part is emitted only if known.
     private static func environment(for screen: Screen) -> [String] {
-        var facts: [String] = []
-        if let c = screen.context {
-            let version = c.browserVersion.isEmpty ? c.browserName : "\(c.browserName) \(c.browserVersion)"
-            facts.append(version)
-            if let v = c.viewport {
-                facts.append("viewport \(Int(v.width)) × \(Int(v.height)) CSS px")
-            }
-        }
-        facts.append("display \(Int(screen.pointSize.width)) × \(Int(screen.pointSize.height)) pt @\(scaleLabel(screen.scale))")
-
-        var lines = [facts.joined(separator: " · ")]
+        var lines = [facts(for: screen).joined(separator: " · ")]
         if let c = screen.context {
             if !c.pageTitle.isEmpty { lines.append("Page title: \(c.pageTitle)") }
             lines.append("URL: <\(c.url)>")

@@ -201,11 +201,19 @@ final class SessionStore {
         ioQueue.async {
             do {
                 var number = 0
+                let stamp = FeedbackComposer.displayTimestamp(s.createdAt)
                 for screen in s.orderedScreens {
                     guard let image = imgs[screen.index] else { throw StoreError.missingImage(screen.index) }
                     let marks = screen.orderedMarks
                     let numbers = (0..<marks.count).map { number + 1 + $0 }
-                    let annotated = try Renderer.annotatedImage(image: image, screen: screen, numbers: numbers)
+                    var annotated = try Renderer.annotatedImage(image: image, screen: screen, numbers: numbers)
+                    // Website feedback gets the window treatment; the agent path keeps the bare
+                    // capture, where a frame and a caption would only cost tokens.
+                    if s.mode == .website {
+                        let caption = FeedbackComposer.caption(for: screen, reporter: reporter, timestamp: stamp)
+                        annotated = try Renderer.framed(annotated, title: caption.title,
+                                                        detail: caption.detail, scale: screen.scale)
+                    }
                     try Renderer.writePNG(annotated, to: dir.appendingPathComponent("screen-\(screen.index)-annotated.png"))
                     for mark in marks {
                         number += 1
