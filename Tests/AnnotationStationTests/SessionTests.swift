@@ -47,12 +47,15 @@ final class SessionTests: XCTestCase {
         XCTAssertEqual(try FileManager.default.destinationOfSymbolicLink(atPath: store.currentLink.path), dir.path)
 
         let done = expectation(description: "finalize")
-        var prompt = ""
+        var delivery: SessionStore.Delivery?
         store.finalize { result in
-            prompt = try! result.get()
+            delivery = try! result.get()
             done.fulfill()
         }
         wait(for: [done], timeout: 10)
+        let prompt = try XCTUnwrap(delivery).text
+        XCTAssertEqual(try XCTUnwrap(delivery).mode, .llm)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dir.appendingPathComponent("feedback.md").path))
 
         for name in ["session.json", "screen-1.png", "screen-1-annotated.png", "region-1.png", "region-2.png", "prompt.md"] {
             XCTAssertTrue(FileManager.default.fileExists(atPath: dir.appendingPathComponent(name).path), "\(name) missing")
@@ -73,6 +76,48 @@ final class SessionTests: XCTestCase {
         let decoded = try SessionStore.decoder.decode(Session.self, from: Data(contentsOf: dir.appendingPathComponent("session.json")))
         XCTAssertEqual(decoded.markCount, 2)
         XCTAssertEqual(decoded.instruction, "do it")
+    }
+
+    /// Website mode writes feedback.md *as well as* prompt.md, and delivers the feedback.
+    func testWebsiteModeFinalizeWritesFeedback() throws {
+        let store = SessionStore(rootDir: root)
+        try store.beginSessionIfNeeded()
+        _ = try store.addScreen(image: image(width: 400, height: 300), displayID: 7, scale: 2, pointSize: CGSize(width: 200, height: 150))
+        store.updateMarks(screenIndex: 1, marks: [
+            Mark(seq: 1, kind: .box(CGRect(x: 20, y: 20, width: 60, height: 40)), note: "the price is cut off"),
+        ])
+        store.setMode(.website)
+        store.setContext(screenIndex: 1, context: PageContext(
+            browserName: "Safari", browserVersion: "18.6", bundleID: "com.apple.Safari",
+            url: "https://example.com/pricing", pageTitle: "Pricing", viewport: nil
+        ))
+        let dir = try XCTUnwrap(store.sessionDir)
+
+        let done = expectation(description: "finalize")
+        var delivery: SessionStore.Delivery?
+        store.finalize { result in
+            delivery = try! result.get()
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 10)
+
+        let d = try XCTUnwrap(delivery)
+        XCTAssertEqual(d.mode, .website)
+        for name in ["prompt.md", "feedback.md", "screen-1-annotated.png"] {
+            XCTAssertTrue(FileManager.default.fileExists(atPath: dir.appendingPathComponent(name).path), "\(name) missing")
+        }
+        XCTAssertEqual(d.text, try String(contentsOf: dir.appendingPathComponent("feedback.md"), encoding: .utf8))
+        XCTAssertTrue(d.text.contains("example.com/pricing"))
+        XCTAssertTrue(d.text.contains("Safari 18.6"))
+        XCTAssertTrue(d.text.contains("- **[1]** the price is cut off"))
+
+        // The mode and the page survive the round trip through session.json.
+        let decoded = try SessionStore.decoder.decode(Session.self, from: Data(contentsOf: dir.appendingPathComponent("session.json")))
+        XCTAssertEqual(decoded.mode, .website)
+        XCTAssertEqual(decoded.primaryContext?.url, "https://example.com/pricing")
+
+        let summary = try XCTUnwrap(SessionStore(rootDir: root).allSessions().first { $0.directory.lastPathComponent == dir.lastPathComponent })
+        XCTAssertTrue(summary.hasFeedback)
     }
 
     func testResumeAndPrune() throws {

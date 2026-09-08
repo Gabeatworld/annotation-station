@@ -134,6 +134,22 @@ final class SessionStore {
         saveQuietly()
     }
 
+    func setMode(_ mode: CaptureMode) {
+        guard var s = session, s.mode != mode else { return }
+        s.mode = mode
+        session = s
+        saveQuietly()
+    }
+
+    /// Attaches the browser page a screen was captured on. Arrives late (the probe runs off the
+    /// main thread) so the screen may already have marks, or be gone.
+    func setContext(screenIndex: Int, context: PageContext) {
+        guard var s = session, let i = s.screens.firstIndex(where: { $0.index == screenIndex }) else { return }
+        s.screens[i].context = context
+        session = s
+        saveQuietly()
+    }
+
     /// Drops a screen. If it was the last one, the whole session goes away.
     func removeScreen(index: Int) {
         guard var s = session, let dir = sessionDir else { return }
@@ -158,10 +174,17 @@ final class SessionStore {
         return img
     }
 
-    /// Burns marks into `screen-k-annotated.png`, crops `region-n.png`, writes `prompt.md`,
-    /// then closes the session (files stay). Rendering runs off the main thread; `completion`
-    /// is called on the main thread with the prompt text.
-    func finalize(completion: @escaping (Result<String, Error>) -> Void) {
+    /// What `finalize` produced: the document that belongs on the clipboard, and where it lives.
+    struct Delivery {
+        let mode: CaptureMode
+        let text: String
+        let directory: URL
+    }
+
+    /// Burns marks into `screen-k-annotated.png`, crops `region-n.png`, writes `prompt.md` (and
+    /// `feedback.md` in website mode), then closes the session (files stay). Rendering runs off
+    /// the main thread; `completion` is called on the main thread.
+    func finalize(completion: @escaping (Result<Delivery, Error>) -> Void) {
         guard let s = session, let dir = sessionDir else {
             completion(.failure(StoreError.noSession))
             return
@@ -171,6 +194,7 @@ final class SessionStore {
             imgs[screen.index] = Renderer.loadPNG(from: dir.appendingPathComponent("screen-\(screen.index).png"))
         }
         let t0 = Date()
+        let reporter = Reporter.current
         ioQueue.async {
             do {
                 var number = 0
@@ -187,13 +211,22 @@ final class SessionStore {
                         }
                     }
                 }
+                // prompt.md is written for every mode: the hub's "Copy Prompt" and the recent
+                // menu work the same whatever the session was sent as.
                 let prompt = PromptComposer.render(session: s, directory: dir)
                 try prompt.write(to: dir.appendingPathComponent("prompt.md"), atomically: true, encoding: .utf8)
+                var text = prompt
+                if s.mode == .website {
+                    let feedback = FeedbackComposer.render(session: s, directory: dir, reporter: reporter)
+                    try feedback.write(to: dir.appendingPathComponent(FeedbackComposer.fileName), atomically: true, encoding: .utf8)
+                    text = feedback
+                }
                 try Self.encoder.encode(s).write(to: dir.appendingPathComponent("session.json"), options: .atomic)
-                Log.info("finalized \(s.id): \(s.screens.count) screen(s), \(number) mark(s) in \(Self.ms(since: t0)) ms")
+                Log.info("finalized \(s.id) as \(s.mode.rawValue): \(s.screens.count) screen(s), \(number) mark(s) in \(Self.ms(since: t0)) ms")
+                let delivery = Delivery(mode: s.mode, text: text, directory: dir)
                 DispatchQueue.main.async {
                     self.close()
-                    completion(.success(prompt))
+                    completion(.success(delivery))
                 }
             } catch {
                 DispatchQueue.main.async { completion(.failure(error)) }
@@ -299,6 +332,7 @@ final class SessionStore {
         let session: Session
         let isFinished: Bool   // prompt.md exists
         let isOpen: Bool       // the session currently being annotated
+        let hasFeedback: Bool  // feedback.md exists (website mode)
     }
 
     func allSessions() -> [Summary] {
@@ -310,7 +344,8 @@ final class SessionStore {
                 directory: dir,
                 session: session,
                 isFinished: fm.fileExists(atPath: dir.appendingPathComponent("prompt.md").path),
-                isOpen: dir.standardizedFileURL == openDir
+                isOpen: dir.standardizedFileURL == openDir,
+                hasFeedback: fm.fileExists(atPath: dir.appendingPathComponent(FeedbackComposer.fileName).path)
             )
         }
     }
@@ -324,6 +359,10 @@ final class SessionStore {
 
     static func prompt(in directory: URL) -> String? {
         try? String(contentsOf: directory.appendingPathComponent("prompt.md"), encoding: .utf8)
+    }
+
+    static func feedback(in directory: URL) -> String? {
+        try? String(contentsOf: directory.appendingPathComponent(FeedbackComposer.fileName), encoding: .utf8)
     }
 
     static func ms(since t0: Date) -> Int {

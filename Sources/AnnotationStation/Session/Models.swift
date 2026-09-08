@@ -1,6 +1,44 @@
 import CoreGraphics
 import Foundation
 
+/// How a finished session is packaged on send (ROADMAP "feedback types"). The pipeline —
+/// capture, marks, numbering, annotated PNGs — is the same for every mode; only the document
+/// written at the end and where it is delivered differ.
+enum CaptureMode: String, Codable, CaseIterable {
+    /// `prompt.md` with absolute PNG paths, pasted into Claude Code.
+    case llm
+    /// `feedback.md`: a human-readable report with the page and browser the marks were made on.
+    case website
+
+    var title: String {
+        switch self {
+        case .llm: return "Claude Code"
+        case .website: return "Website feedback"
+        }
+    }
+}
+
+/// What the frontmost browser was showing when a screen was captured. Collected off the main
+/// thread so it never delays the overlay, so it can be nil: the annotated app was not a browser
+/// we can script, Automation is not granted, or the browser had no open tab.
+struct PageContext: Codable, Equatable {
+    var browserName: String
+    var browserVersion: String
+    var bundleID: String
+    var url: String
+    var pageTitle: String
+    /// CSS pixels, from `innerWidth`/`innerHeight`. Needs "Allow JavaScript from Apple Events",
+    /// which is off by default in every browser, so treat it as a bonus.
+    var viewport: CGSize?
+
+    /// "example.com/pricing" — what a reviewer scans for, without the scheme noise.
+    var shortURL: String {
+        guard let components = URLComponents(string: url), let host = components.host else { return url }
+        let path = components.path == "/" ? "" : components.path
+        return host + path
+    }
+}
+
 /// One annotation session: one or more captured screens plus an optional overall instruction.
 /// Persisted as `session.json` next to the PNGs (PLAN.md §3).
 struct Session: Codable, Equatable {
@@ -8,12 +46,26 @@ struct Session: Codable, Equatable {
     var createdAt: Date
     var screens: [Screen]
     var instruction: String
+    var mode: CaptureMode
 
-    init(id: String, createdAt: Date = Date(), screens: [Screen] = [], instruction: String = "") {
+    init(id: String, createdAt: Date = Date(), screens: [Screen] = [], instruction: String = "", mode: CaptureMode = .llm) {
         self.id = id
         self.createdAt = createdAt
         self.screens = screens
         self.instruction = instruction
+        self.mode = mode
+    }
+
+    // Hand-written so `session.json` files from before capture modes still decode.
+    private enum CodingKeys: String, CodingKey { case id, createdAt, screens, instruction, mode }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        screens = try c.decode([Screen].self, forKey: .screens)
+        instruction = try c.decode(String.self, forKey: .instruction)
+        mode = try c.decodeIfPresent(CaptureMode.self, forKey: .mode) ?? .llm
     }
 }
 
@@ -27,6 +79,8 @@ struct Screen: Codable, Equatable {
     var pixelSize: CGSize
     var marks: [Mark]
     var capturedAt: Date
+    /// Optional, so old `session.json` files decode unchanged.
+    var context: PageContext? = nil
 }
 
 /// A box or an arrow, in screen points with a top-left origin.
@@ -163,4 +217,9 @@ extension Session {
 extension Screen {
     /// Marks in numbering order.
     var orderedMarks: [Mark] { marks.sorted { $0.seq < $1.seq } }
+}
+
+extension Session {
+    /// The page the session is about: the first screen that has one.
+    var primaryContext: PageContext? { orderedScreens.compactMap(\.context).first }
 }

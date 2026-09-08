@@ -31,6 +31,6 @@
     <key>NSScreenCaptureUsageDescription</key>
     <string>Annotation Station captures the display under your cursor so you can draw numbered marks on it and send them to a coding agent.</string>
     <key>NSAppleEventsUsageDescription</key>
-    <string>Annotation Station re-activates the app you were using and pastes the prompt into it.</string>
+    <string>Annotation Station re-activates the app you were using and pastes the prompt into it, and asks your browser which page you annotated so website feedback can record it.</string>
 </dict>
 </plist>
