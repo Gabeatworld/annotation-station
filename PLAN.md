@@ -268,7 +268,7 @@ The status item reflects the state; `⌘⇧⏎` is only enabled when a session i
 
 - **Hotkey:** `⌘⇧A`, same as Casso. It shadows Chrome's "search tabs" shortcut; accepted.
 - **Targets:** Claude Code running in the **Claude Desktop app** and in **Ghostty**. Auto-paste is wired for exactly those two bundle ids; every other app gets clipboard-only. Cursor/Codex are not targets.
-- **Handoff:** text with absolute file paths, text-only pasteboard. Image fallback only if M3 testing shows the Desktop app needs it.
+- **Handoff:** text with absolute file paths, text-only pasteboard. Image fallback only if M3 testing shows the Desktop app needs it. *(Amended: website-feedback mode does attach the annotated PNGs as file items, because its targets are Slack/Linear/docs rather than an agent. The agent path is unchanged.)*
 - **Compose panel:** optional. `⏎` opens it for an overall instruction; `⌘⏎` sends straight from the overlay with notes only.
 - **Sessions:** `~/.annotation-station/sessions/<timestamp>/`, last 20 kept.
 - Mac only, Sonoma+. Single user, no licensing or distribution.

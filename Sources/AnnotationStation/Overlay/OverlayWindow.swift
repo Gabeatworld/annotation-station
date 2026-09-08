@@ -6,6 +6,7 @@ final class OverlayWindow: NSWindow {
     let targetScreen: NSScreen
     let overlayView = OverlayView()
     private let backdrop = BackdropView()
+    private let glow = ScreenGlowView()
 
     init(screen: NSScreen) {
         targetScreen = screen
@@ -24,8 +25,13 @@ final class OverlayWindow: NSWindow {
         backdrop.autoresizingMask = [.width, .height]
         overlayView.frame = content.bounds
         overlayView.autoresizingMask = [.width, .height]
+        // The glow sits on top so nothing paints over it, and refuses hit-testing so every
+        // click still lands on the OverlayView underneath.
+        glow.frame = content.bounds
+        glow.autoresizingMask = [.width, .height]
         content.addSubview(backdrop)
         content.addSubview(overlayView)
+        content.addSubview(glow)
         contentView = content
         setFrame(screen.frame, display: false)
     }
@@ -42,6 +48,14 @@ final class OverlayWindow: NSWindow {
         NSApp.activate(ignoringOtherApps: true)
         makeKeyAndOrderFront(nil)
         makeFirstResponder(overlayView)
+        glow.start()
+    }
+
+    /// Stop the glow's animations whenever the overlay leaves the screen, so a hidden window
+    /// is not quietly driving Core Animation while the user is off in another app.
+    override func orderOut(_ sender: Any?) {
+        glow.stop()
+        super.orderOut(sender)
     }
 }
 

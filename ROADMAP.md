@@ -7,19 +7,33 @@ asked for first; nothing here is committed to a date.
 
 ## Done: Hub (session browser)
 Menu bar → "Sessions…" lists past captures grouped by day, then by session, with a thumbnail,
-mark count, notes preview and the instruction. Per-session actions: copy prompt again, reveal
-the folder in Finder, delete. Still open: re-send to Claude/Ghostty from the hub, reopening a
-session to add screens or edit notes, search and filters.
+mark count, notes preview and the instruction. Per-session actions: view, copy prompt again,
+copy feedback, reveal the folder in Finder, delete. Clicking a thumbnail (or "View") opens the
+screens full size in-app — arrow keys walk the session, `O` flips to the original capture.
+Still open: re-send to Claude/Ghostty from the hub, reopening a session to add screens or edit
+notes, search and filters.
+
+## Done: Which screen is selected
+The display carrying the overlay wears a Siri-style breathing glow around its edge, so a
+multi-monitor desk shows at a glance which screen is frozen. Both the colour sweep and the
+edge falloff are baked once per screen size; only an opacity pulse and a layer rotation run
+per frame, and both stop when the overlay is ordered out or the user asks for reduced motion.
 
 ## Feedback types (capture "modes")
 The same capture + marks pipeline, different packaging on send. A session carries a
-`CaptureMode`; the compose panel picks it ("Send as"), and `finalize` writes the matching
-document. `prompt.md` is written in every mode so the hub's Copy Prompt always works.
+`CaptureMode`; a switch in the overlay toolbar next to Send picks it — so ⌘⏎, which skips the
+compose panel entirely, respects the choice — and the compose panel mirrors the same setting.
+`finalize` writes the matching document. `prompt.md` is written in every mode so the hub's
+Copy Prompt always works.
 - **LLM feedback** (done): `prompt.md` with absolute PNG paths, pasted into Claude Code.
 - **Website feedback** (done): `feedback.md` — a human-readable report with relative image
   links, the page URL and title, browser name and version, viewport, display size and scale,
-  and who filed it. Sending copies it and hands focus back to the browser instead of pasting
-  into an agent; the hub grows a "Copy Feedback" button.
+  and who filed it. Sending copies it — with the annotated PNGs attached as file items, so
+  pasting into Slack, Linear or a doc carries the images — and hands focus back to the browser
+  instead of pasting into an agent; the hub grows a "Copy Feedback" button.
+  - Still missing for a full review flow: a *link* a reviewer can open. The Markdown's image
+    links are relative to the session folder, so the report travels intact only as that folder
+    or via the attached PNGs. Hosting is the "Sharing and teams" item below.
   - The URL comes from the frontmost browser over Apple events (Safari and every Chromium
     browser; Firefox does not expose its tabs). macOS asks once per browser under Privacy &
     Security › Automation — before that grant a report still has the screenshots and notes,

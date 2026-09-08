@@ -179,6 +179,9 @@ final class SessionStore {
         let mode: CaptureMode
         let text: String
         let directory: URL
+        /// The annotated PNGs, in screen order — what a person actually wants pasted alongside
+        /// the report.
+        let images: [URL]
     }
 
     /// Burns marks into `screen-k-annotated.png`, crops `region-n.png`, writes `prompt.md` (and
@@ -223,7 +226,8 @@ final class SessionStore {
                 }
                 try Self.encoder.encode(s).write(to: dir.appendingPathComponent("session.json"), options: .atomic)
                 Log.info("finalized \(s.id) as \(s.mode.rawValue): \(s.screens.count) screen(s), \(number) mark(s) in \(Self.ms(since: t0)) ms")
-                let delivery = Delivery(mode: s.mode, text: text, directory: dir)
+                let images = s.orderedScreens.map { dir.appendingPathComponent("screen-\($0.index)-annotated.png") }
+                let delivery = Delivery(mode: s.mode, text: text, directory: dir, images: images)
                 DispatchQueue.main.async {
                     self.close()
                     completion(.success(delivery))

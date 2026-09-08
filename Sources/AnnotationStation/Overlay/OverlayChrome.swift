@@ -69,11 +69,15 @@ final class OverlayToolbar: HUDPanelView {
     var onNext: (() -> Void)?
     var onCompose: (() -> Void)?
     var onSend: (() -> Void)?
+    var onMode: ((CaptureMode) -> Void)?
 
     private let segmented = NSSegmentedControl()
+    private let modeSwitch = NSSwitch()
+    private let send: NSButton
     private let hint = NSTextField(labelWithString: "⇧ square / 45°   ·   click a mark to select, drag to move, drag a corner or arrowhead to reshape   ·   ⌫ delete   ·   ⌘Z undo   ·   ⇥ cycle")
 
     override init(frame: NSRect) {
+        send = NSButton()
         super.init(frame: frame)
 
         segmented.segmentCount = 2
@@ -100,20 +104,41 @@ final class OverlayToolbar: HUDPanelView {
         next.toolTip = "Save this screen, hide the overlay, go annotate another screen (N or ⌘⇧A)"
         let compose = makeButton("Compose", symbol: "text.bubble", key: "⏎", action: #selector(composeTapped))
         compose.toolTip = "Add an overall instruction, then send (⏎)"
-        let send = makeButton("Send", symbol: "paperplane.fill", key: "⌘⏎", action: #selector(sendTapped), prominent: true)
-        send.toolTip = "Copy the prompt and paste it into Claude Desktop or Ghostty (⌘⏎)"
+        configureButton(send, title: "Send", symbol: "paperplane.fill", key: "⌘⏎", action: #selector(sendTapped), prominent: true)
+
+        // Where Send goes, decided here rather than in the compose panel — ⌘⏎ sends straight
+        // from the overlay without ever opening compose, so the choice has to live where the
+        // send button is. Off is the everyday path (Claude Code); on switches to a report.
+        modeSwitch.target = self
+        modeSwitch.action = #selector(modeToggled(_:))
+        modeSwitch.controlSize = .small
+        let modeLabel = NSTextField(labelWithString: "Website feedback")
+        modeLabel.font = NSFont.systemFont(ofSize: 12, weight: .medium)
+        modeLabel.textColor = .labelColor
+        let modeGroup = NSStackView(views: [modeSwitch, modeLabel])
+        modeGroup.orientation = .horizontal
+        modeGroup.spacing = 7
+        modeGroup.toolTip = "Off: send the prompt to Claude Code. On: write a shareable feedback report with the page and browser you annotated."
 
         let separator = NSBox()
         separator.boxType = .separator
         separator.translatesAutoresizingMaskIntoConstraints = false
         separator.heightAnchor.constraint(equalToConstant: 22).isActive = true
 
-        let row = NSStackView(views: [segmented, keys, separator, discard, next, compose, send])
+        let modeSeparator = NSBox()
+        modeSeparator.boxType = .separator
+        modeSeparator.translatesAutoresizingMaskIntoConstraints = false
+        modeSeparator.heightAnchor.constraint(equalToConstant: 22).isActive = true
+
+        let row = NSStackView(views: [segmented, keys, separator, discard, next, compose, modeSeparator, modeGroup, send])
         row.orientation = .horizontal
         row.spacing = 10
         row.setCustomSpacing(6, after: segmented)
         row.setCustomSpacing(14, after: keys)
         row.setCustomSpacing(14, after: separator)
+        row.setCustomSpacing(14, after: compose)
+        row.setCustomSpacing(14, after: modeGroup)
+        setMode(.llm)
 
         hint.font = NSFont.systemFont(ofSize: 11)
         hint.textColor = .secondaryLabelColor
@@ -133,8 +158,32 @@ final class OverlayToolbar: HUDPanelView {
         segmented.selectedSegment = tool == .box ? 0 : 1
     }
 
+    /// Reflect the session's mode, and say on the Send button itself where it is about to go —
+    /// a switch alone is easy to leave flipped by accident.
+    func setMode(_ mode: CaptureMode) {
+        modeSwitch.state = mode == .website ? .on : .off
+        switch mode {
+        case .llm:
+            configureButton(send, title: "Send", symbol: "paperplane.fill", key: "⌘⏎", action: #selector(sendTapped), prominent: true)
+            send.toolTip = "Copy the prompt and paste it into Claude Desktop or Ghostty (⌘⏎)"
+        case .website:
+            configureButton(send, title: "Send Feedback", symbol: "text.badge.checkmark", key: "⌘⏎", action: #selector(sendTapped), prominent: true)
+            send.toolTip = "Write feedback.md with the page and browser details, and copy it (⌘⏎)"
+        }
+        // "Send Feedback" is wider than "Send", so the HUD has to re-fit around it.
+        if let content = subviews.first { setFrameSize(content.fittingSize) }
+    }
+
     private func makeButton(_ title: String, symbol: String, key: String, action: Selector, prominent: Bool = false) -> NSButton {
-        let button = NSButton(title: title, target: self, action: action)
+        let button = NSButton()
+        configureButton(button, title: title, symbol: symbol, key: key, action: action, prominent: prominent)
+        return button
+    }
+
+    private func configureButton(_ button: NSButton, title: String, symbol: String, key: String, action: Selector, prominent: Bool = false) {
+        button.title = title
+        button.target = self
+        button.action = action
         button.bezelStyle = .rounded
         button.controlSize = .regular
         button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: title)?
@@ -154,7 +203,12 @@ final class OverlayToolbar: HUDPanelView {
             button.bezelColor = .controlAccentColor
             button.contentTintColor = .white
         }
-        return button
+    }
+
+    @objc private func modeToggled(_ sender: NSSwitch) {
+        let mode: CaptureMode = sender.state == .on ? .website : .llm
+        setMode(mode)
+        onMode?(mode)
     }
 
     @objc private func toolChanged(_ sender: NSSegmentedControl) {
