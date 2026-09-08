@@ -1,0 +1,35 @@
+import XCTest
+import CoreGraphics
+@testable import AnnotationStation
+
+final class RendererTests: XCTestCase {
+    /// A solid image stands in for a capture; the frame's geometry is what is under test.
+    private func image(width: Int, height: Int) -> CGImage {
+        let cs = CGColorSpace(name: CGColorSpace.sRGB)!
+        let ctx = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                            space: cs, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        ctx.setFillColor(CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1))
+        ctx.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        return ctx.makeImage()!
+    }
+
+    func testFramedAddsMarginsAndChrome() throws {
+        let shot = image(width: 800, height: 500)
+        let framed = try Renderer.framed(shot, title: "Proper — dev.client.proper.ai/health-check",
+                                         detail: "Google Chrome 152 · display 1728 × 1117 pt @2x", scale: 2)
+        // A margin either side, and the title bar plus caption line stacked vertically.
+        XCTAssertEqual(framed.width, 800 + Int(Renderer.Frame.margin * 2 * 2))
+        XCTAssertGreaterThan(framed.height, 500 + Int(Renderer.Frame.margin * 2 * 2 + Renderer.Frame.titleBar * 2))
+    }
+
+    /// A capture with no page context still frames; the title bar is simply empty.
+    func testFramedWithoutTitle() throws {
+        let framed = try Renderer.framed(image(width: 400, height: 300), title: nil, detail: "display 1440 × 900 pt @1x", scale: 1)
+        XCTAssertEqual(framed.width, 400 + Int(Renderer.Frame.margin * 2))
+    }
+
+    func testBadgeSizeGrowsWithDigits() {
+        XCTAssertEqual(Renderer.badgeSize(for: 1).width, MarkGeometry.badgeDiameter)
+        XCTAssertGreaterThan(Renderer.badgeSize(for: 100).width, MarkGeometry.badgeDiameter)
+    }
+}

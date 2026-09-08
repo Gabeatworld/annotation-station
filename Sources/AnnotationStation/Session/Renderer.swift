@@ -3,10 +3,16 @@ import CoreGraphics
 import ImageIO
 import UniformTypeIdentifiers
 
-/// Mark styling from PLAN.md M1: 3pt #FF3B30 stroke with a 1pt white halo, 22pt badges.
+/// Mark styling: 3pt #C3C3EF stroke with a 1pt halo, 22pt badges.
+///
+/// The accent is pale, so the halo behind it is dark rather than white — a light stroke haloed
+/// in white disappears against a light page, which is most of what gets annotated. Dark behind
+/// light reads on both. Badge numerals are dark ink for the same reason.
 enum MarkStyle {
-    static let color = NSColor(srgbRed: 1.0, green: 0x3B / 255.0, blue: 0x30 / 255.0, alpha: 1)
-    static let halo = NSColor.white
+    static let color = NSColor(srgbRed: 0xC3 / 255.0, green: 0xC3 / 255.0, blue: 0xEF / 255.0, alpha: 1)
+    static let halo = NSColor(srgbRed: 0.10, green: 0.10, blue: 0.16, alpha: 0.85)
+    /// Numerals and any text drawn on top of `color`.
+    static let ink = NSColor(srgbRed: 0.10, green: 0.10, blue: 0.16, alpha: 1)
     static let strokeWidth: CGFloat = 3
     static let haloWidth: CGFloat = 1
     static let badgeFont = NSFont.systemFont(ofSize: 13, weight: .bold)
@@ -89,9 +95,15 @@ enum Renderer {
         }
     }
 
+    /// The pill's size for a given number, so views that host a badge can lay one out.
+    static func badgeSize(for number: Int) -> CGSize {
+        let width = ("\(number)" as NSString).size(withAttributes: [.font: MarkStyle.badgeFont]).width
+        return CGSize(width: max(MarkGeometry.badgeDiameter, width + 10), height: MarkGeometry.badgeDiameter)
+    }
+
     static func drawBadge(_ number: Int, at center: CGPoint, in ctx: CGContext) {
         let text = "\(number)" as NSString
-        let attrs: [NSAttributedString.Key: Any] = [.font: MarkStyle.badgeFont, .foregroundColor: NSColor.white]
+        let attrs: [NSAttributedString.Key: Any] = [.font: MarkStyle.badgeFont, .foregroundColor: MarkStyle.ink]
         let size = text.size(withAttributes: attrs)
         let d = MarkGeometry.badgeDiameter
         let w = max(d, size.width + 10)
@@ -107,7 +119,12 @@ enum Renderer {
         ctx.fillPath()
         ctx.restoreGState()
 
-        text.draw(at: CGPoint(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2), withAttributes: attrs)
+        // Centre the digits optically, not by line box. A line box reserves room for a
+        // descender that "1" or "4" never uses, so centring on it lifts the numeral off the
+        // middle of the circle — visible at 22pt. Centre the cap height instead.
+        let font = MarkStyle.badgeFont
+        let baseline = rect.midY + font.capHeight / 2
+        text.draw(at: CGPoint(x: rect.midX - size.width / 2, y: baseline - font.ascender), withAttributes: attrs)
     }
 
     // MARK: - Burn-in
@@ -141,6 +158,146 @@ enum Renderer {
         let rect = MarkGeometry.cropRect(for: kind, scale: scale, pixelSize: CGSize(width: image.width, height: image.height))
         guard rect.width >= 1, rect.height >= 1 else { return nil }
         return image.cropping(to: rect)
+    }
+
+
+    // MARK: - Window mock (website feedback)
+
+    /// Look of the framed screenshot website feedback ships as. Points; scaled to pixels at draw.
+    enum Frame {
+        static let margin: CGFloat = 44
+        static let corner: CGFloat = 14
+        static let titleBar: CGFloat = 40
+        static let dotRadius: CGFloat = 6
+        static let dotGap: CGFloat = 20
+        static let captionGap: CGFloat = 16
+        static let titleSize: CGFloat = 13
+        static let detailSize: CGFloat = 12
+
+        static let backdropTop = NSColor(srgbRed: 0.16, green: 0.16, blue: 0.22, alpha: 1)
+        static let backdropBottom = NSColor(srgbRed: 0.07, green: 0.07, blue: 0.10, alpha: 1)
+        static let chrome = NSColor(srgbRed: 0.15, green: 0.15, blue: 0.19, alpha: 1)
+        static let chromeRule = NSColor(white: 1, alpha: 0.09)
+        static let dot = NSColor(white: 1, alpha: 0.22)
+        static let titleInk = NSColor(white: 1, alpha: 0.82)
+        static let detailInk = NSColor(white: 1, alpha: 0.55)
+    }
+
+    /// Frame a capture the way macOS frames a window screenshot: rounded corners, a drop shadow
+    /// and a gradient backdrop, with the page in the title bar and the environment on a caption
+    /// line underneath.
+    ///
+    /// The caption is the point, not decoration. Website feedback usually arrives as the image
+    /// on its own — Slack, Linear and Notion take the pasted file off the pasteboard and drop
+    /// the text that came with it — so the page, browser and display have to survive inside the
+    /// picture or the reviewer sees marks with no idea what they were made on.
+    static func framed(_ image: CGImage, title: String?, detail: String, scale: CGFloat) throws -> CGImage {
+        let s = max(scale, 1)
+        let margin = Frame.margin * s
+        let bar = Frame.titleBar * s
+        let gap = Frame.captionGap * s
+
+        let titleAttrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: Frame.titleSize * s, weight: .medium),
+            .foregroundColor: Frame.titleInk,
+        ]
+        let detailAttrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: Frame.detailSize * s, weight: .regular),
+            .foregroundColor: Frame.detailInk,
+        ]
+        let detailHeight = ceil((detail as NSString).size(withAttributes: detailAttrs).height)
+
+        let cardW = CGFloat(image.width)
+        let cardH = bar + CGFloat(image.height)
+        let w = Int((cardW + margin * 2).rounded())
+        let h = Int((margin + cardH + gap + detailHeight + margin).rounded())
+
+        guard let cs = CGColorSpace(name: CGColorSpace.sRGB),
+              let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
+                                  space: cs, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { throw RenderError.bitmapContext }
+
+        // Everything below works in top-left points-as-pixels, like the rest of the renderer.
+        ctx.translateBy(x: 0, y: CGFloat(h))
+        ctx.scaleBy(x: 1, y: -1)
+
+        let full = CGRect(x: 0, y: 0, width: CGFloat(w), height: CGFloat(h))
+        if let gradient = CGGradient(colorsSpace: cs,
+                                     colors: [Frame.backdropTop.cgColor, Frame.backdropBottom.cgColor] as CFArray,
+                                     locations: [0, 1]) {
+            ctx.saveGState()
+            ctx.addRect(full)
+            ctx.clip()
+            ctx.drawLinearGradient(gradient, start: CGPoint(x: 0, y: 0), end: CGPoint(x: 0, y: full.maxY), options: [])
+            ctx.restoreGState()
+        }
+
+        let card = CGRect(x: margin, y: margin, width: cardW, height: cardH)
+        let cardPath = CGPath(roundedRect: card, cornerWidth: Frame.corner * s, cornerHeight: Frame.corner * s, transform: nil)
+
+        ctx.saveGState()
+        ctx.setShadow(offset: CGSize(width: 0, height: -18 * s), blur: 44 * s,
+                      color: NSColor.black.withAlphaComponent(0.45).cgColor)
+        ctx.addPath(cardPath)
+        ctx.setFillColor(Frame.chrome.cgColor)
+        ctx.fillPath()
+        ctx.restoreGState()
+
+        ctx.saveGState()
+        ctx.addPath(cardPath)
+        ctx.clip()
+
+        // The capture fills the card below the title bar. ctx is flipped, so flip it back for
+        // the image or it draws upside down.
+        let shot = CGRect(x: card.minX, y: card.minY + bar, width: cardW, height: CGFloat(image.height))
+        ctx.saveGState()
+        ctx.translateBy(x: 0, y: shot.maxY)
+        ctx.scaleBy(x: 1, y: -1)
+        ctx.draw(image, in: CGRect(x: shot.minX, y: 0, width: shot.width, height: shot.height))
+        ctx.restoreGState()
+
+        ctx.setFillColor(Frame.chromeRule.cgColor)
+        ctx.fill(CGRect(x: card.minX, y: card.minY + bar - max(1, s), width: cardW, height: max(1, s)))
+
+        var dotX = card.minX + 18 * s + Frame.dotRadius * s
+        for _ in 0..<3 {
+            let r = Frame.dotRadius * s
+            ctx.setFillColor(Frame.dot.cgColor)
+            ctx.fillEllipse(in: CGRect(x: dotX - r, y: card.minY + bar / 2 - r, width: r * 2, height: r * 2))
+            dotX += Frame.dotGap * s
+        }
+        ctx.restoreGState()
+
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: ctx, flipped: true)
+
+        if let title, !title.isEmpty {
+            // Centred in the title bar like a browser tab, inset past the dots on both sides so
+            // a long URL truncates instead of running under them.
+            let inset = dotX + 12 * s - card.minX
+            let box = CGRect(x: card.minX + inset, y: card.minY,
+                             width: max(0, cardW - inset * 2), height: bar)
+            let paragraph = NSMutableParagraphStyle()
+            paragraph.lineBreakMode = .byTruncatingMiddle
+            paragraph.alignment = .center
+            var attrs = titleAttrs
+            attrs[.paragraphStyle] = paragraph
+            let lineHeight = (title as NSString).size(withAttributes: attrs).height
+            (title as NSString).draw(in: CGRect(x: box.minX, y: box.midY - lineHeight / 2,
+                                                width: box.width, height: lineHeight),
+                                     withAttributes: attrs)
+        }
+
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byTruncatingTail
+        var attrs = detailAttrs
+        attrs[.paragraphStyle] = paragraph
+        (detail as NSString).draw(in: CGRect(x: card.minX, y: card.maxY + gap, width: cardW, height: detailHeight),
+                                  withAttributes: attrs)
+        NSGraphicsContext.restoreGraphicsState()
+
+        guard let out = ctx.makeImage() else { throw RenderError.bitmapContext }
+        return out
     }
 
     // MARK: - PNG I/O

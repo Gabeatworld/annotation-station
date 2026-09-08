@@ -116,10 +116,16 @@ something. It goes on the clipboard and is pasted into whichever of Claude Deskt
 you used most recently, wherever that window is. If neither is running it's copied and focus
 goes back to what you were annotating.
 
-**Website feedback** writes `feedback.md` instead — the same marks packaged for a person, with
-the page URL and title, browser name and version, viewport, display size and scale, and who
-filed it. The report and the annotated PNGs both go on the clipboard, so pasting into Slack,
-Linear or a doc carries the images with the text.
+**Website feedback** frames each annotated capture like a macOS window screenshot — rounded
+card, shadow, gradient backdrop, the page title and URL in the title bar, and a caption line
+with browser, viewport, display, time and who filed it. That context is burned into the image
+on purpose: pasting a screenshot into Slack, Linear or Notion attaches the file and drops the
+text that came with it, so anything that only lives in the text does not survive the paste.
+
+It also writes `feedback.md` — the same marks packaged for a person rather than an agent,
+carrying the same environment as the caption plus every mark's note and a link to its crop.
+The report and the framed PNGs both go on the clipboard. Which of the two a given app keeps is
+up to that app, which is exactly why the picture has to stand on its own.
 
 Both modes always write `prompt.md`, so the hub's Copy Prompt works on any session.
 
