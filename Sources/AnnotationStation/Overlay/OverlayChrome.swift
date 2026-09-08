@@ -27,7 +27,22 @@ class HUDPanelView: NSVisualEffectView {
             content.topAnchor.constraint(equalTo: topAnchor),
             content.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
+        refit()
+    }
+
+    /// Re-measure after the content changes, and let the overlay re-centre us.
+    ///
+    /// `fittingSize` read before a layout pass can come back short — controls whose size
+    /// depends on an attributed title report an estimate until they have laid out. We clip
+    /// (`masksToBounds` is on for the rounded corners), so a short measurement cuts the ends
+    /// off the row rather than merely crowding it.
+    func refit() {
+        guard let content = subviews.first else { return }
+        content.layoutSubtreeIfNeeded()
         setFrameSize(content.fittingSize)
+        // Our origin is derived from our width in OverlayView.layout(); a subview resizing
+        // does not invalidate the parent's layout on its own.
+        superview?.needsLayout = true
     }
 }
 
@@ -47,7 +62,7 @@ final class OverlayTitleBar: HUDPanelView {
         label.textColor = .white
         stack.orientation = .horizontal
         stack.spacing = 8
-        stack.edgeInsets = NSEdgeInsets(top: 8, left: 14, bottom: 8, right: 16)
+        stack.edgeInsets = NSEdgeInsets(top: 8, left: 18, bottom: 8, right: 20)
         install(stack)
     }
 
@@ -56,7 +71,7 @@ final class OverlayTitleBar: HUDPanelView {
     func update(screenIndex: Int, totalMarks: Int, nextNumber: Int) {
         let marks = totalMarks == 1 ? "1 mark" : "\(totalMarks) marks"
         label.stringValue = "Screen \(screenIndex)   ·   \(marks) in session   ·   next mark [\(nextNumber)]"
-        setFrameSize(stack.fittingSize)
+        refit()
     }
 }
 
@@ -72,7 +87,7 @@ final class OverlayToolbar: HUDPanelView {
     var onMode: ((CaptureMode) -> Void)?
 
     private let segmented = NSSegmentedControl()
-    private let modeSwitch = NSSwitch()
+    private let modePicker = NSSegmentedControl()
     private let send: NSButton
     private let hint = NSTextField(labelWithString: "⇧ square / 45°   ·   click a mark to select, drag to move, drag a corner or arrowhead to reshape   ·   ⌫ delete   ·   ⌘Z undo   ·   ⇥ cycle")
 
@@ -108,17 +123,17 @@ final class OverlayToolbar: HUDPanelView {
 
         // Where Send goes, decided here rather than in the compose panel — ⌘⏎ sends straight
         // from the overlay without ever opening compose, so the choice has to live where the
-        // send button is. Off is the everyday path (Claude Code); on switches to a report.
-        modeSwitch.target = self
-        modeSwitch.action = #selector(modeToggled(_:))
-        modeSwitch.controlSize = .small
-        let modeLabel = NSTextField(labelWithString: "Website feedback")
-        modeLabel.font = NSFont.systemFont(ofSize: 12, weight: .medium)
-        modeLabel.textColor = .labelColor
-        let modeGroup = NSStackView(views: [modeSwitch, modeLabel])
-        modeGroup.orientation = .horizontal
-        modeGroup.spacing = 7
-        modeGroup.toolTip = "Off: send the prompt to Claude Code. On: write a shareable feedback report with the page and browser you annotated."
+        // send button is. Built like the Box/Arrow picker so the two reads as one control set.
+        modePicker.segmentCount = CaptureMode.pickerOrder.count
+        for (index, mode) in CaptureMode.pickerOrder.enumerated() {
+            modePicker.setImage(NSImage(systemSymbolName: mode.symbolName, accessibilityDescription: mode.title), forSegment: index)
+            modePicker.setLabel(mode.shortTitle, forSegment: index)
+            modePicker.setToolTip(mode.pickerToolTip, forSegment: index)
+        }
+        modePicker.segmentStyle = .rounded
+        modePicker.trackingMode = .selectOne
+        modePicker.target = self
+        modePicker.action = #selector(modeChanged(_:))
 
         let separator = NSBox()
         separator.boxType = .separator
@@ -130,14 +145,18 @@ final class OverlayToolbar: HUDPanelView {
         modeSeparator.translatesAutoresizingMaskIntoConstraints = false
         modeSeparator.heightAnchor.constraint(equalToConstant: 22).isActive = true
 
-        let row = NSStackView(views: [segmented, keys, separator, discard, next, compose, modeSeparator, modeGroup, send])
+        let row = NSStackView(views: [segmented, keys, separator, discard, next, compose, modeSeparator, modePicker, send])
         row.orientation = .horizontal
         row.spacing = 10
         row.setCustomSpacing(6, after: segmented)
         row.setCustomSpacing(14, after: keys)
         row.setCustomSpacing(14, after: separator)
         row.setCustomSpacing(14, after: compose)
-        row.setCustomSpacing(14, after: modeGroup)
+        row.setCustomSpacing(14, after: modePicker)
+        // Padding lives here, not on the column: the column is as wide as its widest child, so
+        // insets declared out there are not part of the row's fitting width and the end
+        // controls get clipped by the panel's rounded corners.
+        row.edgeInsets = NSEdgeInsets(top: 0, left: 22, bottom: 0, right: 22)
         setMode(.llm)
 
         hint.font = NSFont.systemFont(ofSize: 11)
@@ -148,7 +167,7 @@ final class OverlayToolbar: HUDPanelView {
         column.orientation = .vertical
         column.alignment = .centerX
         column.spacing = 6
-        column.edgeInsets = NSEdgeInsets(top: 10, left: 14, bottom: 10, right: 14)
+        column.edgeInsets = NSEdgeInsets(top: 10, left: 16, bottom: 10, right: 16)
         install(column)
     }
 
@@ -161,7 +180,7 @@ final class OverlayToolbar: HUDPanelView {
     /// Reflect the session's mode, and say on the Send button itself where it is about to go —
     /// a switch alone is easy to leave flipped by accident.
     func setMode(_ mode: CaptureMode) {
-        modeSwitch.state = mode == .website ? .on : .off
+        modePicker.selectedSegment = CaptureMode.pickerOrder.firstIndex(of: mode) ?? 0
         switch mode {
         case .llm:
             configureButton(send, title: "Send", symbol: "paperplane.fill", key: "⌘⏎", action: #selector(sendTapped), prominent: true)
@@ -171,7 +190,7 @@ final class OverlayToolbar: HUDPanelView {
             send.toolTip = "Write feedback.md with the page and browser details, and copy it (⌘⏎)"
         }
         // "Send Feedback" is wider than "Send", so the HUD has to re-fit around it.
-        if let content = subviews.first { setFrameSize(content.fittingSize) }
+        refit()
     }
 
     private func makeButton(_ title: String, symbol: String, key: String, action: Selector, prominent: Bool = false) -> NSButton {
@@ -205,8 +224,9 @@ final class OverlayToolbar: HUDPanelView {
         }
     }
 
-    @objc private func modeToggled(_ sender: NSSwitch) {
-        let mode: CaptureMode = sender.state == .on ? .website : .llm
+    @objc private func modeChanged(_ sender: NSSegmentedControl) {
+        let order = CaptureMode.pickerOrder
+        let mode = order.indices.contains(sender.selectedSegment) ? order[sender.selectedSegment] : .llm
         setMode(mode)
         onMode?(mode)
     }

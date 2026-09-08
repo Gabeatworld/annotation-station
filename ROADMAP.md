@@ -21,8 +21,10 @@ per frame, and both stop when the overlay is ordered out or the user asks for re
 
 ## Feedback types (capture "modes")
 The same capture + marks pipeline, different packaging on send. A session carries a
-`CaptureMode`; a switch in the overlay toolbar next to Send picks it — so ⌘⏎, which skips the
-compose panel entirely, respects the choice — and the compose panel mirrors the same setting.
+`CaptureMode`; a `Web / Claude` segmented picker in the overlay toolbar next to Send chooses it
+— so ⌘⏎, which skips the compose panel entirely, respects the choice — and the compose panel
+mirrors it with the same control. Both are built like the Box/Arrow tool picker, so the toolbar
+reads as one set of controls rather than a row of mixed widgets.
 `finalize` writes the matching document. `prompt.md` is written in every mode so the hub's
 Copy Prompt always works.
 - **LLM feedback** (done): `prompt.md` with absolute PNG paths, pasted into Claude Code.
