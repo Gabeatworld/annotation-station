@@ -112,6 +112,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayViewDelegate {
             }
         case "hub":
             hub.present()
+        case "view":
+            hub.openNewestSession()
         case "next":
             nextScreen()
         case "compose":
@@ -243,6 +245,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayViewDelegate {
             numberOffset: store.session?.numberOffset(forScreenIndex: screen.index) ?? 0,
             screenIndex: screen.index
         )
+        window.overlayView.setMode(store.session?.mode ?? .llm)
         overlayWindow = window
         window.present()
     }
@@ -321,6 +324,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayViewDelegate {
 
     func overlayDidRequestNextScreen(_ view: OverlayView) {
         nextScreen()
+    }
+
+    /// The switch in the overlay toolbar is the authoritative choice: ⌘⏎ sends straight from
+    /// here without ever opening the compose panel.
+    func overlayDidChangeMode(_ view: OverlayView, to mode: CaptureMode) {
+        store.setMode(mode)
+        Log.info("mode set to \(mode.rawValue) from the overlay")
     }
 
     func overlayDidRequestDiscardScreen(_ view: OverlayView) {
@@ -459,7 +469,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayViewDelegate {
             guard let self else { return }
             switch result {
             case .success(let delivery):
-                Clipboard.copy(delivery.text)
+                switch delivery.mode {
+                case .llm: Clipboard.copy(delivery.text)
+                case .website: Clipboard.copy(delivery.text, attaching: delivery.images)
+                }
                 Log.info("\(delivery.mode.rawValue) document on clipboard (\(delivery.text.count) chars) \(SessionStore.ms(since: t0)) ms after send")
                 state = .idle
                 refreshStatus()
@@ -485,7 +498,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayViewDelegate {
         previousApp = nil
         annotated?.activate(from: .current, options: [])
         NSSound(named: "Glass")?.play()
-        Toast.show("Website feedback copied · \(FeedbackComposer.fileName) in \(delivery.directory.lastPathComponent)",
+        let images = delivery.images.count
+        Toast.show("Feedback + \(images) annotated image\(images == 1 ? "" : "s") copied · paste into Slack, Linear or a doc",
                    symbol: "text.badge.checkmark", duration: 3)
     }
 

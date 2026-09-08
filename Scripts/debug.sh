@@ -6,6 +6,7 @@
 #   Scripts/debug.sh demo               # add three demo marks to the open overlay
 #   Scripts/debug.sh snapshot out.png   # app captures its own display (overlay included) to out.png
 #   Scripts/debug.sh compose            # open the compose panel (instruction, notes, send-as mode)
+#   Scripts/debug.sh hub | view         # sessions window / full-size viewer on the newest session
 #   Scripts/debug.sh next | send | discard
 set -euo pipefail
 ACTION="${1:?action}"

@@ -10,6 +10,8 @@ final class HubWindowController: NSWindowController {
     private let stack = NSStackView()
     private let footer = NSTextField(labelWithString: "")
     private let thumbnailQueue = DispatchQueue(label: "com.gabe.annotation-station.thumbnails", qos: .userInitiated)
+    /// Held so the viewer window is not deallocated the moment it is shown.
+    private var viewer: ScreenshotViewerController?
 
     init(store: SessionStore) {
         self.store = store
@@ -178,8 +180,11 @@ final class HubWindowController: NSWindowController {
             let raw = summary.directory.appendingPathComponent("screen-\(screen.index).png")
             let url = FileManager.default.fileExists(atPath: annotated.path) ? annotated : raw
             let ratio = screen.pointSize.height / max(screen.pointSize.width, 1)
-            let thumb = ThumbnailView(url: url, size: NSSize(width: 176, height: max(80, 176 * ratio)))
-            thumb.toolTip = "Open \(url.lastPathComponent)"
+            let index = screen.index
+            let thumb = ThumbnailView(size: NSSize(width: 176, height: max(80, 176 * ratio))) { [weak self] in
+                self?.openViewer(for: summary, startAt: index)
+            }
+            thumb.toolTip = "Open screen \(index) with its marks"
             thumbs.addArrangedSubview(thumb)
             loadThumbnail(url, into: thumb)
         }
@@ -232,13 +237,15 @@ final class HubWindowController: NSWindowController {
         }
 
         // Actions.
+        let view = actionButton("View", symbol: "photo", action: #selector(viewScreens(_:)), dir: summary.directory)
+        view.isEnabled = !screens.isEmpty
         let copy = actionButton("Copy Prompt", symbol: "doc.on.clipboard", action: #selector(copyPrompt(_:)), dir: summary.directory)
         copy.isEnabled = summary.isFinished
         let reveal = actionButton("Reveal", symbol: "folder", action: #selector(reveal(_:)), dir: summary.directory)
         let delete = actionButton("Delete", symbol: "trash", action: #selector(deleteSession(_:)), dir: summary.directory)
         delete.hasDestructiveAction = true
         delete.isEnabled = !summary.isOpen
-        var buttons: [NSView] = [copy]
+        var buttons: [NSView] = [view, copy]
         if summary.hasFeedback {
             buttons.append(actionButton("Copy Feedback", symbol: "text.badge.checkmark",
                                         action: #selector(copyFeedback(_:)), dir: summary.directory))
@@ -312,6 +319,48 @@ final class HubWindowController: NSWindowController {
         onCopyPrompt?(dir)
     }
 
+    /// Open the full-size viewer on one session, starting at a given screen.
+    private func openViewer(for summary: SessionStore.Summary, startAt index: Int) {
+        let items = summary.session.orderedScreens.map { screen in
+            ScreenshotViewerController.Item(
+                index: screen.index,
+                annotated: summary.directory.appendingPathComponent("screen-\(screen.index)-annotated.png"),
+                raw: summary.directory.appendingPathComponent("screen-\(screen.index).png"),
+                subtitle: Self.subtitle(for: screen, in: summary.session)
+            )
+        }
+        let title = "\(summary.session.id)  ·  \(summary.session.markCount) mark\(summary.session.markCount == 1 ? "" : "s")"
+        guard let viewer = ScreenshotViewerController(sessionTitle: title, items: items, startAt: index) else { return }
+        self.viewer = viewer
+        viewer.present()
+    }
+
+    /// The notes on this screen, or the page it was captured on when there are none.
+    private static func subtitle(for screen: Screen, in session: Session) -> String {
+        let offset = session.numberOffset(forScreenIndex: screen.index)
+        let notes = screen.orderedMarks.enumerated().compactMap { i, mark -> String? in
+            let note = mark.note.trimmingCharacters(in: .whitespacesAndNewlines)
+            return note.isEmpty ? nil : "[\(offset + i + 1)] \(note)"
+        }
+        if !notes.isEmpty { return notes.joined(separator: "   ·   ") }
+        if let context = screen.context { return context.shortURL }
+        return screen.marks.isEmpty ? "No marks" : "\(screen.marks.count) mark(s), no notes"
+    }
+
+    /// Debug hook entry point: open the viewer on the newest session that has screens.
+    func openNewestSession() {
+        guard let summary = store.allSessions().first(where: { !$0.session.screens.isEmpty }),
+              let first = summary.session.orderedScreens.first else { return }
+        openViewer(for: summary, startAt: first.index)
+    }
+
+    @objc private func viewScreens(_ sender: Any?) {
+        guard let dir = directory(for: sender),
+              let summary = store.allSessions().first(where: { $0.directory.standardizedFileURL == dir.standardizedFileURL }),
+              let first = summary.session.orderedScreens.first else { return }
+        openViewer(for: summary, startAt: first.index)
+    }
+
     @objc private func copyFeedback(_ sender: Any?) {
         guard let dir = directory(for: sender) else { return }
         onCopyFeedback?(dir)
@@ -344,12 +393,12 @@ final class HubWindowController: NSWindowController {
     }
 }
 
-/// Thumbnail that opens its file when clicked.
+/// Thumbnail that reports a click; the hub decides what to open.
 private final class ThumbnailView: NSImageView {
-    private let url: URL
+    private let onClick: () -> Void
 
-    init(url: URL, size: NSSize) {
-        self.url = url
+    init(size: NSSize, onClick: @escaping () -> Void) {
+        self.onClick = onClick
         super.init(frame: NSRect(origin: .zero, size: size))
         imageScaling = .scaleProportionallyUpOrDown
         wantsLayer = true
@@ -370,6 +419,6 @@ private final class ThumbnailView: NSImageView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        NSWorkspace.shared.open(url)
+        onClick()
     }
 }

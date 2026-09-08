@@ -4,6 +4,7 @@ protocol OverlayViewDelegate: AnyObject {
     func overlayMarksDidChange(_ view: OverlayView)
     func overlayDidRequestCompose(_ view: OverlayView)
     func overlayDidRequestSendNow(_ view: OverlayView)
+    func overlayDidChangeMode(_ view: OverlayView, to mode: CaptureMode)
     func overlayDidRequestNextScreen(_ view: OverlayView)
     func overlayDidRequestDiscardScreen(_ view: OverlayView)
     func overlayDidRequestDiscardSession(_ view: OverlayView)
@@ -66,6 +67,11 @@ final class OverlayView: NSView {
         toolbar.onNext = { [weak self] in self.map { $0.delegate?.overlayDidRequestNextScreen($0) } }
         toolbar.onCompose = { [weak self] in self.map { $0.delegate?.overlayDidRequestCompose($0) } }
         toolbar.onSend = { [weak self] in self.map { $0.delegate?.overlayDidRequestSendNow($0) } }
+        toolbar.onMode = { [weak self] mode in
+            guard let self else { return }
+            delegate?.overlayDidChangeMode(self, to: mode)
+            positionChrome()
+        }
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
@@ -102,6 +108,12 @@ final class OverlayView: NSView {
         let menuBarHeight = window?.screen.map { $0.frame.maxY - $0.visibleFrame.maxY } ?? 25
         titleBar.setFrameOrigin(CGPoint(x: (bounds.width - titleBar.frame.width) / 2, y: menuBarHeight + 12))
         toolbar.setFrameOrigin(CGPoint(x: (bounds.width - toolbar.frame.width) / 2, y: bounds.maxY - toolbar.frame.height - 28))
+    }
+
+    /// Show the session's current send target in the toolbar switch.
+    func setMode(_ mode: CaptureMode) {
+        toolbar.setMode(mode)
+        positionChrome()
     }
 
     private func refreshTitle() {
