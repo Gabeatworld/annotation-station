@@ -47,8 +47,9 @@ Copy Prompt always works.
     browser's developer menu, so it is omitted more often than not.
 - **Framed screenshot** (done, website mode only): marks are burned in, then the capture is
   framed like a macOS window screenshot — rounded card, drop shadow, gradient backdrop, three
-  window dots, the page title and URL centred in the title bar, and a caption line underneath
-  carrying browser, viewport, display, time and reporter.
+  window dots, the page title and URL centred in the title bar, the notes listed under it
+  against their badge numbers, and a caption line carrying browser, viewport, display, time
+  and reporter.
   The caption is the point, not decoration: a pasted screenshot nearly always arrives alone,
   because Slack, Linear and Notion take the image file off the pasteboard and drop the text
   that came with it. Burning the context into the picture is what makes a paste self-contained.

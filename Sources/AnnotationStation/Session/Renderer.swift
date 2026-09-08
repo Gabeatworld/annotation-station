@@ -173,6 +173,11 @@ enum Renderer {
         static let captionGap: CGFloat = 16
         static let titleSize: CGFloat = 13
         static let detailSize: CGFloat = 12
+        static let noteGap: CGFloat = 22
+        static let noteRowGap: CGFloat = 11
+        static let noteSize: CGFloat = 13
+        /// Width reserved for the badge plus its gutter, so every note's text starts on one line.
+        static let noteColumn: CGFloat = 36
 
         static let backdropTop = NSColor(srgbRed: 0.16, green: 0.16, blue: 0.22, alpha: 1)
         static let backdropBottom = NSColor(srgbRed: 0.07, green: 0.07, blue: 0.10, alpha: 1)
@@ -181,6 +186,15 @@ enum Renderer {
         static let dot = NSColor(white: 1, alpha: 0.22)
         static let titleInk = NSColor(white: 1, alpha: 0.82)
         static let detailInk = NSColor(white: 1, alpha: 0.55)
+        static let noteInk = NSColor(white: 1, alpha: 0.88)
+        static let noteMutedInk = NSColor(white: 1, alpha: 0.4)
+    }
+
+    /// One numbered mark, for the legend printed under the framed capture.
+    struct Note {
+        let number: Int
+        let text: String
+        let isArrow: Bool
     }
 
     /// Frame a capture the way macOS frames a window screenshot: rounded corners, a drop shadow
@@ -191,7 +205,7 @@ enum Renderer {
     /// on its own — Slack, Linear and Notion take the pasted file off the pasteboard and drop
     /// the text that came with it — so the page, browser and display have to survive inside the
     /// picture or the reviewer sees marks with no idea what they were made on.
-    static func framed(_ image: CGImage, title: String?, detail: String, scale: CGFloat) throws -> CGImage {
+    static func framed(_ image: CGImage, title: String?, detail: String, notes: [Note], scale: CGFloat) throws -> CGImage {
         let s = max(scale, 1)
         let margin = Frame.margin * s
         let bar = Frame.titleBar * s
@@ -209,8 +223,31 @@ enum Renderer {
 
         let cardW = CGFloat(image.width)
         let cardH = bar + CGFloat(image.height)
+        let noteColumn = Frame.noteColumn * s
+        let noteWidth = cardW - noteColumn
+        let noteAttrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: Frame.noteSize * s, weight: .regular),
+            .foregroundColor: Frame.noteInk,
+        ]
+        let mutedNoteAttrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: Frame.noteSize * s, weight: .regular),
+            .foregroundColor: Frame.noteMutedInk,
+        ]
+        // A long note wraps rather than truncating: it is the whole point of the picture.
+        let badgeHeight = MarkGeometry.badgeDiameter * s
+        let noteRows: [(note: Note, height: CGFloat, empty: Bool)] = notes.map { note in
+            let trimmed = note.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let body = trimmed.isEmpty ? "—" : trimmed
+            let bounds = (body as NSString).boundingRect(
+                with: CGSize(width: noteWidth, height: .greatestFiniteMagnitude),
+                options: [.usesLineFragmentOrigin], attributes: trimmed.isEmpty ? mutedNoteAttrs : noteAttrs)
+            return (note, max(badgeHeight, ceil(bounds.height)), trimmed.isEmpty)
+        }
+        let notesHeight = noteRows.isEmpty ? 0
+            : Frame.noteGap * s + noteRows.reduce(0) { $0 + $1.height } + Frame.noteRowGap * s * CGFloat(noteRows.count - 1)
+
         let w = Int((cardW + margin * 2).rounded())
-        let h = Int((margin + cardH + gap + detailHeight + margin).rounded())
+        let h = Int((margin + cardH + notesHeight + gap + detailHeight + margin).rounded())
 
         guard let cs = CGColorSpace(name: CGColorSpace.sRGB),
               let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
@@ -288,11 +325,32 @@ enum Renderer {
                                      withAttributes: attrs)
         }
 
+        // The legend. Without it the reviewer gets numbered marks and nothing to read them
+        // against, since the report they were numbered in does not survive the paste.
+        var noteY = card.maxY + Frame.noteGap * s
+        for row in noteRows {
+            let badgeSize = Renderer.badgeSize(for: row.note.number)
+            ctx.saveGState()
+            ctx.translateBy(x: card.minX + badgeSize.width * s / 2, y: noteY + badgeHeight / 2)
+            ctx.scaleBy(x: s, y: s)
+            drawBadge(row.note.number, at: .zero, in: ctx)
+            ctx.restoreGState()
+
+            let body = row.empty ? "—" : row.note.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let text = row.note.isArrow && !row.empty ? "↗  \(body)" : body
+            (text as NSString).draw(with: CGRect(x: card.minX + noteColumn, y: noteY,
+                                                 width: noteWidth, height: row.height),
+                                    options: [.usesLineFragmentOrigin],
+                                    attributes: row.empty ? mutedNoteAttrs : noteAttrs,
+                                    context: nil)
+            noteY += row.height + Frame.noteRowGap * s
+        }
+
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineBreakMode = .byTruncatingTail
         var attrs = detailAttrs
         attrs[.paragraphStyle] = paragraph
-        (detail as NSString).draw(in: CGRect(x: card.minX, y: card.maxY + gap, width: cardW, height: detailHeight),
+        (detail as NSString).draw(in: CGRect(x: card.minX, y: card.maxY + notesHeight + gap, width: cardW, height: detailHeight),
                                   withAttributes: attrs)
         NSGraphicsContext.restoreGraphicsState()
 

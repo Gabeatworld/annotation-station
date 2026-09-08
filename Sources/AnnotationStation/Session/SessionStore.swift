@@ -211,8 +211,12 @@ final class SessionStore {
                     // capture, where a frame and a caption would only cost tokens.
                     if s.mode == .website {
                         let caption = FeedbackComposer.caption(for: screen, reporter: reporter, timestamp: stamp)
+                        let legend = zip(marks, numbers).map {
+                            Renderer.Note(number: $1, text: $0.note, isArrow: $0.kind.isArrow)
+                        }
                         annotated = try Renderer.framed(annotated, title: caption.title,
-                                                        detail: caption.detail, scale: screen.scale)
+                                                        detail: caption.detail, notes: legend,
+                                                        scale: screen.scale)
                     }
                     try Renderer.writePNG(annotated, to: dir.appendingPathComponent("screen-\(screen.index)-annotated.png"))
                     for mark in marks {
