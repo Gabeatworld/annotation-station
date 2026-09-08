@@ -60,8 +60,10 @@ Copy Prompt always works.
   served out of this repo; `Scripts/release.sh` builds with a Developer ID, notarizes, staples,
   signs and writes the appcast entry. The repo was made public so release assets are fetchable
   without auth. Still blocked on an Apple Developer Program membership — until there is a
-  Developer ID certificate and an `SUPublicEDKey`, both scripts refuse to produce a release and
-  the app hides its update menu rather than trusting an unsigned feed. Mac App Store is out:
+  Developer ID certificate and an `SUPublicEDKey`, both scripts refuse to produce a notarized
+  release and the app hides its update menu rather than trusting an unsigned feed.
+  `Scripts/release.sh --unnotarized` ships today without a membership: everything works except
+  the first launch, which each person clears once by hand (`dist/INSTALL.md` explains it). Mac App Store is out:
   the sandbox forbids the global hotkey and the Accessibility auto-paste.
 - Shared spaces: a session is uploadable to a shared feedback board for a team.
   Needs a backend or a shared folder; decide once the hub exists.

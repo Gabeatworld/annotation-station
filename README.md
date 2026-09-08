@@ -163,14 +163,37 @@ The app is not on the Mac App Store and can't be: the sandbox forbids both the g
 and the Accessibility auto-paste. It ships instead as a notarized `.app` that updates itself
 through [Sparkle](https://sparkle-project.org).
 
-`Scripts/release.sh` does the whole cut — Developer ID build, notarize, staple, sign, appcast:
+`Scripts/release.sh` does the whole cut — build, sign, notarize, staple, appcast:
 
 ```bash
-Scripts/release.sh --keys     # one-time: the EdDSA key pair updates are signed with
-Scripts/release.sh 0.2.0      # build + notarize + staple + sign + appcast entry
+Scripts/release.sh --keys                # one-time: the EdDSA key pair updates are signed with
+Scripts/release.sh 0.2.0                 # Developer ID build, notarized and stapled
+Scripts/release.sh --unnotarized 0.2.0   # self-signed, no Apple membership needed
 ```
 
-Three one-time things it needs, in order:
+### Shipping without paying Apple
+
+Notarization is the only part that costs money, and it buys exactly one thing: a clean first
+launch. Signing, packaging, EdDSA signatures, the appcast and auto-updates all work without a
+membership, so `--unnotarized` produces a build you can hand to someone today.
+
+The cost is that their *first* launch is blocked by Gatekeeper, and they have to clear it once —
+either with `xattr -dr com.apple.quarantine /Applications/AnnotationStation.app`, or via System
+Settings › Privacy & Security › Open Anyway. (Control-clicking the app and choosing Open stopped
+working for this in macOS 15.) The script writes `dist/INSTALL.md` spelling that out, to send
+along with the zip.
+
+It is a one-time cost per person, not per release: Sparkle clears the quarantine flag on
+whatever it installs, so updates never ask again. Verified in Sparkle's own source —
+`SUPlainInstaller` calls `releaseItemFromQuarantineAtRootURL:`, and its Gatekeeper pre-warm scan
+is explicitly non-fatal.
+
+Both paths sign with the stable self-signed certificate rather than ad-hoc, which matters more
+for distribution than it does locally: TCC keys Screen Recording and Accessibility to the code
+requirement, and an ad-hoc requirement is the binary's cdhash. Ad-hoc builds would make every
+teammate re-grant both permissions on every update.
+
+Three one-time things the notarized path needs, in order (`--unnotarized` needs only the third):
 
 1. **An Apple Developer Program membership** ($99/yr) and a *Developer ID Application*
    certificate. Only a Developer ID can be notarized, and only a notarized build opens on
