@@ -186,10 +186,12 @@ final class OverlayToolbar: HUDPanelView {
             configureButton(send, title: "Send", symbol: "paperplane.fill", key: "⌘⏎", action: #selector(sendTapped), prominent: true)
             send.toolTip = "Copy the prompt and paste it into Claude Desktop or Ghostty (⌘⏎)"
         case .website:
-            configureButton(send, title: "Send Feedback", symbol: "text.badge.checkmark", key: "⌘⏎", action: #selector(sendTapped), prominent: true)
-            send.toolTip = "Write feedback.md with the page and browser details, and copy it (⌘⏎)"
+            // "Copy", not "Send": nothing leaves the machine, it goes on the clipboard for you
+            // to paste. Matches the hub's own Copy Feedback button.
+            configureButton(send, title: "Copy Feedback", symbol: "doc.on.doc.fill", key: "⌘⏎", action: #selector(sendTapped), prominent: true)
+            send.toolTip = "Write feedback.md with the page and browser details, and copy it with the annotated images (⌘⏎)"
         }
-        // "Send Feedback" is wider than "Send", so the HUD has to re-fit around it.
+        // "Copy Feedback" is wider than "Send", so the HUD has to re-fit around it.
         refit()
     }
 

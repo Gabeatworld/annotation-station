@@ -127,10 +127,89 @@ enum Renderer {
         text.draw(at: CGPoint(x: rect.midX - size.width / 2, y: baseline - font.ascender), withAttributes: attrs)
     }
 
+
+    // MARK: - Note chips
+
+    /// A note to place beside its mark's badge.
+    struct ChipItem {
+        let id: UUID
+        let kind: Mark.Kind
+        let text: String
+        /// "Add note…" rather than a real note: drawn outlined on screen, never burned in.
+        let isPlaceholder: Bool
+    }
+
+    struct ChipLayout {
+        /// Where each chip landed, for hit-testing what was drawn.
+        var chips: [UUID: CGRect] = [:]
+        /// Every mark's badge, including one whose chip was skipped.
+        var badges: [UUID: CGRect] = [:]
+    }
+
+    /// Lay out and draw each note beside its badge, sliding down past badges and earlier chips
+    /// so two marks in the same corner do not stack on top of each other.
+    ///
+    /// Shared by the overlay and the burn-in for the same reason `drawMarks` is: the note you
+    /// positioned while annotating should be where you left it in the exported PNG.
+    @discardableResult
+    static func drawNoteChips(_ items: [ChipItem], bounds: CGRect, skipping: UUID? = nil, in ctx: CGContext) -> ChipLayout {
+        var layout = ChipLayout()
+        let radius = MarkGeometry.badgeDiameter / 2
+        for item in items {
+            let center = MarkGeometry.badgeCenter(for: item.kind, in: bounds)
+            layout.badges[item.id] = CGRect(x: center.x - radius, y: center.y - radius,
+                                            width: 2 * radius, height: 2 * radius)
+        }
+        for item in items where item.id != skipping {
+            let center = MarkGeometry.badgeCenter(for: item.kind, in: bounds)
+            let paragraph = NSMutableParagraphStyle()
+            paragraph.lineBreakMode = .byTruncatingTail
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: NSFont.systemFont(ofSize: 12, weight: item.isPlaceholder ? .regular : .medium),
+                .foregroundColor: item.isPlaceholder ? NSColor.white.withAlphaComponent(0.7) : NSColor.white,
+                .paragraphStyle: paragraph,
+            ]
+            let text = item.text.replacingOccurrences(of: "\n", with: " ")
+            let measured = (text as NSString).size(withAttributes: attrs)
+            let width = min(measured.width, 300) + 18
+            let height = measured.height + 8
+            var rect = CGRect(x: center.x + radius + 6, y: center.y - height / 2, width: width, height: height)
+            rect.origin.x = min(rect.origin.x, bounds.maxX - width - 4)
+            rect.origin.y = min(max(rect.origin.y, 4), bounds.maxY - height - 4)
+            let obstacles = layout.badges.filter { $0.key != item.id }.map(\.value).map { $0.insetBy(dx: -4, dy: -4) }
+                + layout.chips.values.map { $0.insetBy(dx: -4, dy: -4) }
+            var attempts = 0
+            while attempts < 6, obstacles.contains(where: { $0.intersects(rect) }) {
+                rect.origin.y += height + 6
+                attempts += 1
+            }
+            rect.origin.y = min(rect.origin.y, bounds.maxY - height - 4)
+
+            ctx.saveGState()
+            ctx.setFillColor(NSColor(white: 0.1, alpha: 0.82).cgColor)
+            ctx.addPath(CGPath(roundedRect: rect, cornerWidth: height / 2, cornerHeight: height / 2, transform: nil))
+            ctx.fillPath()
+            if item.isPlaceholder {
+                ctx.setStrokeColor(NSColor.white.withAlphaComponent(0.35).cgColor)
+                ctx.setLineWidth(1)
+                ctx.addPath(CGPath(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), cornerWidth: height / 2, cornerHeight: height / 2, transform: nil))
+                ctx.strokePath()
+            }
+            ctx.restoreGState()
+            (text as NSString).draw(in: rect.insetBy(dx: 9, dy: 4), withAttributes: attrs)
+            layout.chips[item.id] = rect
+        }
+        return layout
+    }
+
     // MARK: - Burn-in
 
     /// The raw capture with this screen's marks and their (session-global) numbers burned in.
-    static func annotatedImage(image: CGImage, screen: Screen, numbers: [Int]) throws -> CGImage {
+    ///
+    /// `includeNotes` also burns each note in beside its badge, which is what website feedback
+    /// wants — the picture travels without the report. The agent path leaves them off: the note
+    /// text is already in prompt.md, and a second copy inside the image only costs tokens.
+    static func annotatedImage(image: CGImage, screen: Screen, numbers: [Int], includeNotes: Bool = false) throws -> CGImage {
         let w = image.width, h = image.height
         guard let cs = CGColorSpace(name: CGColorSpace.sRGB),
               let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
@@ -145,8 +224,19 @@ enum Renderer {
 
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(cgContext: ctx, flipped: true)
+        let bounds = CGRect(origin: .zero, size: screen.pointSize)
         let items = zip(screen.marks, numbers).map { Item(kind: $0.kind, number: $1) }
-        drawMarks(items, bounds: CGRect(origin: .zero, size: screen.pointSize), dimOutsideBoxes: false, in: ctx)
+        drawMarks(items, bounds: bounds, dimOutsideBoxes: false, in: ctx)
+        if includeNotes {
+            // Empty notes are dropped rather than burned in as "Add note…", which is an
+            // invitation to the annotator, not something to show a reviewer.
+            let chips = screen.orderedMarks.compactMap { mark -> ChipItem? in
+                let text = mark.note.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !text.isEmpty else { return nil }
+                return ChipItem(id: mark.id, kind: mark.kind, text: text, isPlaceholder: false)
+            }
+            drawNoteChips(chips, bounds: bounds, in: ctx)
+        }
         NSGraphicsContext.restoreGraphicsState()
 
         guard let out = ctx.makeImage() else { throw RenderError.bitmapContext }

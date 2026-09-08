@@ -6,12 +6,16 @@
 #   Scripts/debug.sh demo               # add three demo marks to the open overlay
 #   Scripts/debug.sh snapshot out.png   # app captures its own display (overlay included) to out.png
 #   Scripts/debug.sh compose            # open the compose panel (instruction, notes, send-as mode)
+#   Scripts/debug.sh mode website|llm   # flip the send-mode picker
 #   Scripts/debug.sh hub | view         # sessions window / full-size viewer on the newest session
 #   Scripts/debug.sh next | send | discard
 set -euo pipefail
 ACTION="${1:?action}"
 TARGET="${2:-}"
-[[ -n "$TARGET" ]] && TARGET="$(cd "$(dirname "$TARGET")" && pwd)/$(basename "$TARGET")"
+# `mode` passes a plain value; every other action's argument is a path to be absolutised.
+if [[ -n "$TARGET" && "$ACTION" != "mode" ]]; then
+    TARGET="$(cd "$(dirname "$TARGET")" && pwd)/$(basename "$TARGET")"
+fi
 osascript -l JavaScript - "$ACTION" "$TARGET" <<'JS' >/dev/null
 ObjC.import('Foundation');
 function run(argv) {
