@@ -9,8 +9,9 @@ import QuartzCore
 /// of which Core Animation does on the GPU without redrawing anything. Purely decorative: it
 /// never takes a click, and it is not burned into the annotated PNG.
 final class ScreenGlowView: NSView {
-    /// How far the light reaches in from the screen edge, in points.
-    private static let thickness: CGFloat = 26
+    /// How far the light reaches in from the screen edge, in points. Deliberately narrow: it
+    /// only has to answer "which screen", and a wide band starts competing with the content.
+    private static let thickness: CGFloat = 15
     /// Roughly the corner of a modern Mac display; on a square external panel it still reads fine.
     private static let cornerRadius: CGFloat = 24
     /// Longest edge of the rasterised mask. A soft falloff carries no high-frequency detail, so
@@ -19,14 +20,15 @@ final class ScreenGlowView: NSView {
     /// Side of the pre-rendered colour wheel.
     private static let sweepSide = 1024
 
-    /// Warm-anchored sweep: the mark red the app already uses, carried around through orange,
-    /// pink and violet so the travel is visible without turning into a rainbow.
+    /// Anchored on the mark accent and kept close to it. The old sweep ran red → orange → pink
+    /// → violet, which read as an alert; these stay within a few steps of #C3C3EF so the travel
+    /// registers as light moving rather than as a colour changing.
     private static let palette: [NSColor] = [
-        NSColor(srgbRed: 1.00, green: 0.23, blue: 0.19, alpha: 1),   // mark red
-        NSColor(srgbRed: 1.00, green: 0.58, blue: 0.00, alpha: 1),   // orange
-        NSColor(srgbRed: 1.00, green: 0.18, blue: 0.53, alpha: 1),   // pink
-        NSColor(srgbRed: 0.58, green: 0.31, blue: 0.95, alpha: 1),   // violet
-        NSColor(srgbRed: 1.00, green: 0.23, blue: 0.19, alpha: 1),   // back to red, seamless
+        NSColor(srgbRed: 0.765, green: 0.765, blue: 0.937, alpha: 1),  // #C3C3EF, the mark accent
+        NSColor(srgbRed: 0.643, green: 0.729, blue: 0.910, alpha: 1),  // soft blue
+        NSColor(srgbRed: 0.788, green: 0.686, blue: 0.886, alpha: 1),  // orchid
+        NSColor(srgbRed: 0.847, green: 0.780, blue: 0.663, alpha: 1),  // pale gold, a little warmth
+        NSColor(srgbRed: 0.765, green: 0.765, blue: 0.937, alpha: 1),  // back to the accent, seamless
     ]
 
     private let sweep = CALayer()
@@ -81,27 +83,29 @@ final class ScreenGlowView: NSView {
         sweep.removeAllAnimations()
 
         guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
-            layer?.opacity = 0.44
+            layer?.opacity = 0.32
             return
         }
 
         // Breathing: slow, shallow, and never all the way out — the screen should look alive,
         // not like something is flashing at you.
         let breathe = CABasicAnimation(keyPath: "opacity")
-        breathe.fromValue = 0.32
-        breathe.toValue = 0.74
-        breathe.duration = 2.7
+        breathe.fromValue = 0.24
+        breathe.toValue = 0.52
+        breathe.duration = 3.6
         breathe.autoreverses = true
         breathe.repeatCount = .infinity
         breathe.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        layer?.opacity = 0.52
+        layer?.opacity = 0.38
         layer?.add(breathe, forKey: "breathe")
 
-        // The colour travels around the border; one lap is slow enough to read as ambient.
+        // The colour travels around the border. A lap takes the best part of a minute, so at any
+        // given moment nothing appears to be moving — you only notice the edge is a different
+        // colour than it was when you look back.
         let travel = CABasicAnimation(keyPath: "transform.rotation.z")
         travel.fromValue = 0
         travel.toValue = 2 * Double.pi
-        travel.duration = 16
+        travel.duration = 54
         travel.repeatCount = .infinity
         travel.timingFunction = CAMediaTimingFunction(name: .linear)
         sweep.add(travel, forKey: "travel")
