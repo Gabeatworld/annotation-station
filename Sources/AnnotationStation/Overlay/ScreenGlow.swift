@@ -20,14 +20,17 @@ final class ScreenGlowView: NSView {
     /// Side of the pre-rendered colour wheel.
     private static let sweepSide = 1024
 
-    /// Anchored on the mark accent and kept close to it. The old sweep ran red → orange → pink
-    /// → violet, which read as an alert; these stay within a few steps of #C3C3EF so the travel
-    /// registers as light moving rather than as a colour changing.
+    /// Anchored on the mark accent, but spread right around the hue circle so several colours are
+    /// on the edge at once — that simultaneity is what makes Siri's glow read as a gradient
+    /// rather than as a tinted border. Keeping every stop pale and unsaturated is what keeps it
+    /// quiet; clustering them near one hue only made it look flat.
     private static let palette: [NSColor] = [
         NSColor(srgbRed: 0.765, green: 0.765, blue: 0.937, alpha: 1),  // #C3C3EF, the mark accent
-        NSColor(srgbRed: 0.643, green: 0.729, blue: 0.910, alpha: 1),  // soft blue
-        NSColor(srgbRed: 0.788, green: 0.686, blue: 0.886, alpha: 1),  // orchid
-        NSColor(srgbRed: 0.847, green: 0.780, blue: 0.663, alpha: 1),  // pale gold, a little warmth
+        NSColor(srgbRed: 0.608, green: 0.722, blue: 0.961, alpha: 1),  // periwinkle
+        NSColor(srgbRed: 0.525, green: 0.847, blue: 0.910, alpha: 1),  // aqua
+        NSColor(srgbRed: 0.639, green: 0.882, blue: 0.784, alpha: 1),  // mint
+        NSColor(srgbRed: 0.937, green: 0.729, blue: 0.855, alpha: 1),  // pink
+        NSColor(srgbRed: 0.780, green: 0.663, blue: 0.914, alpha: 1),  // violet
         NSColor(srgbRed: 0.765, green: 0.765, blue: 0.937, alpha: 1),  // back to the accent, seamless
     ]
 
