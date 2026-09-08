@@ -32,5 +32,16 @@
     <string>Annotation Station captures the display under your cursor so you can draw numbered marks on it and send them to a coding agent.</string>
     <key>NSAppleEventsUsageDescription</key>
     <string>Annotation Station re-activates the app you were using and pastes the prompt into it, and asks your browser which page you annotated so website feedback can record it.</string>
+    <key>SUFeedURL</key>
+    <string>https://raw.githubusercontent.com/Gabeatworld/annotation-station/main/appcast.xml</string>
+    <!-- EdDSA public key that release builds must be signed with. Fill this in once, from the
+         output of Scripts/release.sh --keys (which runs Sparkle's generate_keys). While it is
+         empty the app disables updates entirely instead of trusting an unsigned feed. -->
+    <key>SUPublicEDKey</key>
+    <string></string>
+    <key>SUEnableAutomaticChecks</key>
+    <true/>
+    <key>SUScheduledCheckInterval</key>
+    <integer>86400</integer>
 </dict>
 </plist>

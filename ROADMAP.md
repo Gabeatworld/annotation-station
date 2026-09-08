@@ -45,8 +45,13 @@ Copy Prompt always works.
   mockup (rounded window, shadow, gradient backdrop) for sharing in Slack/docs.
 
 ## Sharing and teams (later)
-- Keep everything local first. Add "push an update" so the app can be distributed to
-  Gabe's company and agency teams (signed + notarized build, Sparkle-style updates).
+- **Distribution** (plumbing done): the app embeds Sparkle and updates itself from an appcast
+  served out of this repo; `Scripts/release.sh` builds with a Developer ID, notarizes, staples,
+  signs and writes the appcast entry. The repo was made public so release assets are fetchable
+  without auth. Still blocked on an Apple Developer Program membership — until there is a
+  Developer ID certificate and an `SUPublicEDKey`, both scripts refuse to produce a release and
+  the app hides its update menu rather than trusting an unsigned feed. Mac App Store is out:
+  the sandbox forbids the global hotkey and the Accessibility auto-paste.
 - Shared spaces: a session is uploadable to a shared feedback board for a team.
   Needs a backend or a shared folder; decide once the hub exists.
 

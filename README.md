@@ -149,6 +149,50 @@ Click a thumbnail (or **View**) to open the screens full size without leaving th
 walk the session, `O` flips to the untouched capture, `⎋` closes. Per session you can also copy
 the prompt again, copy the feedback report, reveal the folder in Finder, or delete it.
 
+## Distribution and updates
+
+The app is not on the Mac App Store and can't be: the sandbox forbids both the global hotkey
+and the Accessibility auto-paste. It ships instead as a notarized `.app` that updates itself
+through [Sparkle](https://sparkle-project.org).
+
+`Scripts/release.sh` does the whole cut — Developer ID build, notarize, staple, sign, appcast:
+
+```bash
+Scripts/release.sh --keys     # one-time: the EdDSA key pair updates are signed with
+Scripts/release.sh 0.2.0      # build + notarize + staple + sign + appcast entry
+```
+
+Three one-time things it needs, in order:
+
+1. **An Apple Developer Program membership** ($99/yr) and a *Developer ID Application*
+   certificate. Only a Developer ID can be notarized, and only a notarized build opens on
+   someone else's Mac without a Gatekeeper detour. `RELEASE=1 Scripts/bundle.sh` refuses to
+   run without one rather than producing a build that fails on arrival.
+2. **A stored notarization credential**, so no password lives in the repo:
+   ```bash
+   xcrun notarytool store-credentials "annotation-station" \
+       --apple-id you@example.com --team-id TEAMID --password <app-specific-password>
+   ```
+3. **The signing key pair**, from `Scripts/release.sh --keys`. Paste the public half into
+   `Resources/Info.plist` under `SUPublicEDKey` and keep the private half somewhere safe — it
+   stays in the login keychain, and losing it means existing installs can never verify another
+   update. Until that key is filled in, the app disables updates entirely and hides the
+   *Check for Updates…* menu item; it will not trust an unsigned feed.
+
+Releases are GitHub Releases, and the appcast is served from the repo itself
+(`appcast.xml` on `main`), so pushing the commit is what actually ships an update. That only
+works because the repo is public — a private repo's release assets need auth, which Sparkle
+has no way to supply.
+
+### Signing layout
+
+Sparkle ships as a framework containing its own XPC services and a helper app, so
+`Scripts/bundle.sh` signs inside-out — services, then `Updater.app`, then `Autoupdate`, then
+the framework, then the app — and never with `--deep`, which would re-sign nested code with
+the outer bundle's options. Dev builds keep using the self-signed certificate so TCC grants
+survive rebuilds; release builds switch to the Developer ID and add the hardened runtime,
+which notarization requires.
+
 ## Development
 
 ```bash
@@ -175,6 +219,7 @@ path — `zsh` has a `log` builtin that shadows the real one:
 | `Session/` | the session model, disk store, renderer, and the two document composers |
 | `Hub/` | the Sessions window and the full-size viewer |
 | `Output/` | clipboard and auto-paste |
+| `App/Updater.swift` | Sparkle auto-updates |
 
 Marks are stored in screen points with a top-left origin; captures are in pixels. The scale
 factor is stored per screen and applied only at render time, so the overlay and the burned-in

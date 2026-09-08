@@ -1,13 +1,14 @@
 import AppKit
 
 /// Menu-bar icon, the `screens · marks` badge, and the menu:
-/// Capture, Send…, Discard Session, Recent Sessions ▸, Quit.
+/// Capture, Send…, Discard Session, Recent Sessions ▸, Check for Updates…, Quit.
 final class StatusItemController: NSObject, NSMenuDelegate {
     var onCapture: (() -> Void)?
     var onSend: (() -> Void)?
     var onDiscard: (() -> Void)?
     var onRecentSelected: ((URL) -> Void)?
     var onSessions: (() -> Void)?
+    var onCheckForUpdates: (() -> Void)?
     var onQuit: (() -> Void)?
     /// Supplies finished sessions (newest first) when the Recent submenu opens.
     var recentSessionsProvider: (() -> [URL])?
@@ -19,7 +20,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let discardItem: NSMenuItem
     private let recentMenu = NSMenu(title: "Recent Sessions")
 
-    override init() {
+    /// `showsUpdates` is false in a build that cannot update itself (see `Updater.isConfigured`);
+    /// the item is left out entirely rather than shown disabled, since there is nothing the
+    /// user could do about it.
+    init(showsUpdates: Bool) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         sendItem = NSMenuItem(title: "Send Session…", action: #selector(send(_:)), keyEquivalent: "\r")
         discardItem = NSMenuItem(title: "Discard Session", action: #selector(discard(_:)), keyEquivalent: "")
@@ -61,6 +65,11 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.addItem(recentItem)
 
         menu.addItem(.separator())
+        if showsUpdates {
+            let updateItem = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdates(_:)), keyEquivalent: "")
+            updateItem.target = self
+            menu.addItem(updateItem)
+        }
         let quitItem = NSMenuItem(title: "Quit Annotation Station", action: #selector(quit(_:)), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
@@ -101,6 +110,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     @objc private func send(_ sender: Any?) { onSend?() }
     @objc private func discard(_ sender: Any?) { onDiscard?() }
     @objc private func sessions(_ sender: Any?) { onSessions?() }
+    @objc private func checkForUpdates(_ sender: Any?) { onCheckForUpdates?() }
     @objc private func quit(_ sender: Any?) { onQuit?() }
     @objc private func recent(_ sender: NSMenuItem) {
         if let url = sender.representedObject as? URL { onRecentSelected?(url) }
