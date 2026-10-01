@@ -1,13 +1,15 @@
 import AppKit
 
 /// Menu-bar icon, the `screens · marks` badge, and the menu:
-/// Capture, Send…, Discard Session, Recent Sessions ▸, Check for Updates…, Quit.
+/// Capture, Send…, Discard Session, Sessions…, Copy Last Prompt, Recent Sessions ▸,
+/// Check for Updates…, Quit.
 final class StatusItemController: NSObject, NSMenuDelegate {
     var onCapture: (() -> Void)?
     var onSend: (() -> Void)?
     var onDiscard: (() -> Void)?
     var onRecentSelected: ((URL) -> Void)?
     var onSessions: (() -> Void)?
+    var onCopyLastPrompt: (() -> Void)?
     var onCheckForUpdates: (() -> Void)?
     var onQuit: (() -> Void)?
     /// Supplies finished sessions (newest first) when the Recent submenu opens.
@@ -19,6 +21,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let sendItem: NSMenuItem
     private let discardItem: NSMenuItem
     private let recentMenu = NSMenu(title: "Recent Sessions")
+    private let copyLastItem = NSMenuItem(title: "Copy Last Prompt", action: #selector(copyLastPrompt(_:)), keyEquivalent: "")
 
     /// `showsUpdates` is false in a build that cannot update itself (see `Updater.isConfigured`);
     /// the item is left out entirely rather than shown disabled, since there is nothing the
@@ -59,6 +62,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         sessionsItem.image = NSImage(systemSymbolName: "square.grid.2x2", accessibilityDescription: nil)
         sessionsItem.target = self
         menu.addItem(sessionsItem)
+        // The one-click version of the first entry in Recent Sessions, which is the one people
+        // reach for — sitting directly above that submenu rather than in it.
+        copyLastItem.image = NSImage(systemSymbolName: "doc.on.clipboard", accessibilityDescription: nil)
+        copyLastItem.target = self
+        menu.addItem(copyLastItem)
+
         let recentItem = NSMenuItem(title: "Recent Sessions", action: nil, keyEquivalent: "")
         recentMenu.delegate = self
         recentItem.submenu = recentMenu
@@ -75,6 +84,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.addItem(quitItem)
 
         menu.autoenablesItems = false
+        menu.delegate = self
         statusItem.menu = menu
         update(sessionOpen: false, badge: "")
     }
@@ -89,6 +99,11 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     // MARK: NSMenuDelegate (Recent Sessions)
 
     func menuNeedsUpdate(_ menu: NSMenu) {
+        if menu === self.menu {
+            // Only knowable when the menu opens: there is no notification when a session finishes.
+            copyLastItem.isEnabled = !(recentSessionsProvider?() ?? []).isEmpty
+            return
+        }
         guard menu === recentMenu else { return }
         menu.removeAllItems()
         let sessions = recentSessionsProvider?() ?? []
@@ -110,6 +125,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     @objc private func send(_ sender: Any?) { onSend?() }
     @objc private func discard(_ sender: Any?) { onDiscard?() }
     @objc private func sessions(_ sender: Any?) { onSessions?() }
+    @objc private func copyLastPrompt(_ sender: Any?) { onCopyLastPrompt?() }
     @objc private func checkForUpdates(_ sender: Any?) { onCheckForUpdates?() }
     @objc private func quit(_ sender: Any?) { onQuit?() }
     @objc private func recent(_ sender: NSMenuItem) {

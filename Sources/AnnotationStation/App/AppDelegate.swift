@@ -52,6 +52,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayViewDelegate {
         statusItem.onDiscard = { [weak self] in self?.discardSessionFromMenu() }
         statusItem.onRecentSelected = { [weak self] url in self?.recopyPrompt(from: url) }
         statusItem.onSessions = { [weak self] in self?.hub.present() }
+        statusItem.onCopyLastPrompt = { [weak self] in
+            guard let url = self?.store.recentSessions(limit: 1).first else { return }
+            self?.recopyPrompt(from: url)
+        }
         statusItem.onCheckForUpdates = { [weak self] in self?.updater.checkForUpdates() }
         statusItem.recentSessionsProvider = { [weak self] in self?.store.recentSessions(limit: 10) ?? [] }
         statusItem.onQuit = { NSApp.terminate(nil) }
