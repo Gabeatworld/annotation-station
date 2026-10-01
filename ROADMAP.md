@@ -68,6 +68,13 @@ Copy Prompt always works.
 - Shared spaces: a session is uploadable to a shared feedback board for a team.
   Needs a backend or a shared folder; decide once the hub exists.
 
+## Hands-free notes (done)
+Opening a note presses the dictation app's record hotkey; ⏎ presses it again and holds the note
+open until the transcript is pasted in, then commits. Off until `voiceHotKey` is set in defaults,
+since VoiceInk exposes no URL scheme, no AppleScript and no CLI — its global hotkey is the only
+way in, and there is nothing sensible to guess. The compose panel's instruction field does not do
+this yet.
+
 ## Polish backlog
 - Image pasteboard fallback if a target ever stops reading paths.
 - Multi-display overlays (⌘⇧A on another display adds it as a screen).

@@ -51,6 +51,30 @@ showing a permission that is on but not working:
 tccutil reset ScreenCapture com.gabe.annotation-station
 ```
 
+## Hands-free notes
+
+Opening a note can start your dictation app recording, and ⏎ can stop it and wait for the
+transcript before committing. Off until you tell it which key to press:
+
+```bash
+defaults write com.gabe.annotation-station voiceHotKey "ctrl+opt+d"
+```
+
+Use whatever VoiceInk (or any dictation app) has bound to toggling its recorder. Accepts
+`cmd` / `ctrl` / `opt` / `shift` plus a letter, digit, `space`, `return`, `tab`, `escape` or
+`f1`–`f15`. Anything it cannot parse reads as off, rather than pressing some other key.
+
+Draw a box, speak, press ⏎. The button reads *Transcribing…* while it waits, and the note
+commits by itself the moment the text lands. ⎋ stops recording and discards.
+
+⏎ cannot just commit, because transcription finishes *after* the stop — committing immediately
+would close the field and the paste would land in whatever is underneath. If nothing arrives
+within 25 seconds the note is handed back to you rather than committing something you never saw.
+
+VoiceInk has no URL scheme, no AppleScript dictionary and no CLI, so its global hotkey is the
+only way in; the app presses it with `CGEvent`, the same mechanism as auto-paste, using the
+Accessibility permission it already holds.
+
 ## Dictation, copy and paste
 
 ⌘X / ⌘C / ⌘V / ⌘A work in note fields and the compose panel, and so does any dictation tool that

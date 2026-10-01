@@ -537,6 +537,9 @@ final class OverlayView: NSView {
         note = popover
         needsDisplay = true
         window?.makeFirstResponder(popover.field)
+        // After focusing, never before: the transcript arrives as a paste, and a paste lands
+        // wherever the focus is.
+        popover.startDictation()
     }
 
     private func noteOrigin(for kind: Mark.Kind) -> CGPoint {
@@ -571,6 +574,8 @@ final class OverlayView: NSView {
 
     private func closeNote() {
         guard let popover = note else { return }
+        // Whatever route closed the note, stop the microphone with it.
+        popover.endDictation()
         note = nil
         window?.makeFirstResponder(self)
         popover.removeFromSuperview()
