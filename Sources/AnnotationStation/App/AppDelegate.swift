@@ -44,6 +44,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayViewDelegate {
         Log.info("launched (bundle: \(Bundle.main.bundleIdentifier ?? "none"))")
         Log.info("screen recording preflight: \(Permissions.hasScreenCapture() ? "granted" : "not granted"); accessibility: \(Permissions.hasAccessibility() ? "granted" : "not granted")")
 
+        // Before any window exists: without it, nothing can be pasted into a note (see EditMenu).
+        EditMenu.install()
+
         store.pruneOldSessions(keep: 20)
 
         statusItem = StatusItemController(showsUpdates: Updater.isConfigured)

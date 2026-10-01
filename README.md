@@ -51,6 +51,17 @@ showing a permission that is on but not working:
 tccutil reset ScreenCapture com.gabe.annotation-station
 ```
 
+## Dictation, copy and paste
+
+⌘X / ⌘C / ⌘V / ⌘A work in note fields and the compose panel, and so does any dictation tool that
+inserts its transcript by pasting — VoiceInk among them.
+
+That needs saying because it is not free. macOS dispatches the standard editing commands through
+`NSApp.mainMenu`'s key equivalents, *before* the keystroke reaches `keyDown`, so an app that never
+sets a main menu drops them silently. `App/EditMenu.swift` installs one. An `LSUIElement` app
+never displays a menu bar, so it is invisible; it exists only to be found by key-equivalent
+lookup. ⌘Z is deliberately not in it — that already means "undo the last mark".
+
 ## Permissions
 
 | Permission | Needed for | If you decline |
